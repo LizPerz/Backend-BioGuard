@@ -24,6 +24,11 @@ public record LoginCodigoRequest(
 
 public record AuthResponse(string Token, string UserId, string Nombre, string Rol, string Plan);
 
+public record RefreshTokenRequest(
+    [Required] string RefreshToken);
+
+public record RefreshTokenResponse(string AccessToken, string RefreshToken);
+
 public record Enviar2FARequest(
     [Required] [EmailAddress] string Correo);
 

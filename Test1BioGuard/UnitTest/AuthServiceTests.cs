@@ -110,7 +110,7 @@ public class AuthServiceTests
         var user = new UsuarioWeb
         {
             Id = "user123", Correo = "test@test.com", Activo = true,
-            PasswordHash = BCryptHelper.HashPassword("Password123!"),
+            PasswordHash = PasswordHasher.Hash("Password123!"),
             PlanId = "plan1", Nombre = "Test", ApellidoPaterno = "User"
         };
         var plan = new Plan { Id = "plan1", Nombre = "Premium" };
@@ -152,7 +152,7 @@ public class AuthServiceTests
         var user = new UsuarioWeb
         {
             Id = "user123", Correo = "test@test.com", Activo = false,
-            PasswordHash = BCryptHelper.HashPassword("Password123!")
+            PasswordHash = PasswordHasher.Hash("Password123!")
         };
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
                 It.IsAny<IMongoCollection<UsuarioWeb>>(),
@@ -386,7 +386,7 @@ public class AuthServiceTests
     {
         var user = new UsuarioWeb
         {
-            Id = "user123", PasswordHash = BCryptHelper.HashPassword("OldPass123!")
+            Id = "user123", PasswordHash = PasswordHasher.Hash("OldPass123!")
         };
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
                 It.IsAny<IMongoCollection<UsuarioWeb>>(),
@@ -410,7 +410,7 @@ public class AuthServiceTests
     {
         var user = new UsuarioWeb
         {
-            Id = "user123", PasswordHash = BCryptHelper.HashPassword("CorrectPass123!")
+            Id = "user123", PasswordHash = PasswordHasher.Hash("CorrectPass123!")
         };
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
                 It.IsAny<IMongoCollection<UsuarioWeb>>(),

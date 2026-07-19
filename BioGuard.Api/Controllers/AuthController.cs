@@ -81,6 +81,18 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
+    // ── Refresh Token ──────────────────────────────────────
+    // POST /api/Auth/refresh [WEB]
+
+    [HttpPost("refresh")]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
+    {
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var result = await _authService.RefreshTokenAsync(request, ip);
+        if (result == null) return Unauthorized(new { message = "Refresh token inválido o expirado" });
+        return Ok(result);
+    }
+
     // ── Recuperación de contraseña ────────────────────────────
     // POST /api/Auth/forgot-password [WEB]
 

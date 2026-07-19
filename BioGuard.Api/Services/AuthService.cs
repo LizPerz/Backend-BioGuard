@@ -17,6 +17,7 @@ public class AuthService
     private readonly string _issuer;
     private readonly string _audience;
     private readonly int _expirationMinutes;
+    private readonly int _refreshTokenDays;
 
     public AuthService(IMongoDbContext db, IConfiguration config)
     {
@@ -26,7 +27,8 @@ public class AuthService
             ?? throw new InvalidOperationException("JWT secret key not configured.");
         _issuer = config["Jwt:Issuer"] ?? "BioGuardApi";
         _audience = config["Jwt:Audience"] ?? "BioGuardApp";
-        _expirationMinutes = int.Parse(config["Jwt:ExpirationMinutes"] ?? "1440");
+        _expirationMinutes = int.Parse(config["Jwt:ExpirationMinutes"] ?? "60");
+        _refreshTokenDays = int.Parse(config["Jwt:RefreshTokenDays"] ?? "7");
     }
 
     // ── Register ───────────────────────────────────────────
@@ -45,7 +47,7 @@ public class AuthService
             ApellidoPaterno = request.ApellidoPaterno,
             ApellidoMaterno = request.ApellidoMaterno,
             Correo = request.Correo,
-            PasswordHash = BCryptHelper.HashPassword(request.Password),
+            PasswordHash = PasswordHasher.Hash(request.Password),
             ProveedorAuth = "local",
             PlanId = plan.Id,
             Activo = true,
@@ -65,7 +67,7 @@ public class AuthService
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
         if (user == null || !user.Activo) return null;
 
-        if (!BCryptHelper.VerifyPassword(request.Password, user.PasswordHash)) return null;
+        if (!PasswordHasher.Verify(request.Password, user.PasswordHash)) return null;
 
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
         var token = GenerateToken(user.Id, user.Correo, "dueno");
@@ -129,6 +131,54 @@ public class AuthService
         }
 
         return null;
+    }
+
+    // ── Refresh Token ──────────────────────────────────────
+
+    public async Task<RefreshTokenResponse?> RefreshTokenAsync(RefreshTokenRequest request, string? ip = null)
+    {
+        var stored = await _db.FindFirstOrDefaultAsync(_db.RefreshTokens, t => t.Token == request.RefreshToken);
+        if (stored == null || !stored.IsActive) return null;
+
+        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Id == stored.UsuarioId);
+        if (user == null) return null;
+
+        var newRefreshToken = GenerateRefreshToken();
+        var oldRefreshCopy = new RefreshToken
+        {
+            Id = stored.Id,
+            UsuarioId = stored.UsuarioId,
+            Token = stored.Token,
+            ExpiresAt = stored.ExpiresAt,
+            CreatedAt = stored.CreatedAt,
+            Ip = stored.Ip,
+            ReplacedBy = newRefreshToken
+        };
+
+        await RevokeRefreshTokenAsync(oldRefreshCopy);
+
+        await _db.RefreshTokens.InsertOneAsync(new RefreshToken
+        {
+            UsuarioId = user.Id,
+            Token = newRefreshToken,
+            ExpiresAt = DateTime.UtcNow.AddDays(_refreshTokenDays),
+            Ip = ip
+        });
+
+        var accessToken = GenerateToken(user.Id, user.Correo, "dueno");
+
+        return new RefreshTokenResponse(accessToken, newRefreshToken);
+    }
+
+    public async Task RevokeRefreshTokenAsync(RefreshToken token)
+    {
+        var filter = Builders<RefreshToken>.Filter.Where(t =>
+            t.Token == token.Token ||
+            (token.ReplacedBy != null && t.Token == token.ReplacedBy));
+
+        var update = Builders<RefreshToken>.Update.Set(t => t.RevokedAt, DateTime.UtcNow);
+
+        await _db.RefreshTokens.UpdateManyAsync(filter, update);
     }
 
     // ── 2FA ────────────────────────────────────────────────
@@ -200,7 +250,7 @@ public class AuthService
         if (user.ResetPasswordExpira == null || user.ResetPasswordExpira < DateTime.UtcNow) return false;
 
         var update = Builders<UsuarioWeb>.Update
-            .Set(u => u.PasswordHash, BCryptHelper.HashPassword(request.NuevaPassword))
+            .Set(u => u.PasswordHash, PasswordHasher.Hash(request.NuevaPassword))
             .Set(u => u.ResetPasswordToken, null)
             .Set(u => u.ResetPasswordExpira, null);
 
@@ -216,10 +266,10 @@ public class AuthService
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Id == userId);
         if (user == null) return false;
 
-        if (!BCryptHelper.VerifyPassword(request.PasswordActual, user.PasswordHash)) return false;
+        if (!PasswordHasher.Verify(request.PasswordActual, user.PasswordHash)) return false;
 
         var update = Builders<UsuarioWeb>.Update
-            .Set(u => u.PasswordHash, BCryptHelper.HashPassword(request.NuevaPassword));
+            .Set(u => u.PasswordHash, PasswordHasher.Hash(request.NuevaPassword));
 
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == userId, update);
 
@@ -228,7 +278,7 @@ public class AuthService
 
     // ── Helpers ────────────────────────────────────────────
 
-    private string GenerateToken(string id, string email, string role)
+    internal string GenerateToken(string id, string email, string role)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -252,11 +302,19 @@ public class AuthService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
+    internal string GenerateRefreshToken()
+    {
+        var bytes = new byte[64];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(bytes);
+        return Convert.ToBase64String(bytes);
+    }
+
     private static string RandomNumberString(int length)
     {
         var numbers = new char[length];
         for (int i = 0; i < length; i++)
-            numbers[i] = (char)Random.Shared.Next('0', '9');
+            numbers[i] = (char)RandomNumberGenerator.GetInt32('0', '9' + 1);
         return new string(numbers);
     }
 
@@ -275,15 +333,32 @@ public class AuthService
     }
 }
 
-public static class BCryptHelper
+// ── PBKDF2 Password Hasher ──────────────────────────────
+
+public static class PasswordHasher
 {
-    public static string HashPassword(string password)
+    private const int SaltSize = 16;
+    private const int KeySize = 32;
+    private const int Iterations = 100_000;
+    private static readonly HashAlgorithmName Algorithm = HashAlgorithmName.SHA256;
+
+    public static string Hash(string password)
     {
-        return BCrypt.Net.BCrypt.HashPassword(password, 12);
+        var salt = RandomNumberGenerator.GetBytes(SaltSize);
+        var key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, Algorithm, KeySize);
+        return $"{Iterations}.{Convert.ToBase64String(salt)}.{Convert.ToBase64String(key)}";
     }
 
-    public static bool VerifyPassword(string password, string hash)
+    public static bool Verify(string password, string hash)
     {
-        return BCrypt.Net.BCrypt.Verify(password, hash);
+        var parts = hash.Split('.', 3);
+        if (parts.Length != 3) return false;
+        if (!int.TryParse(parts[0], out var iterations)) return false;
+
+        var salt = Convert.FromBase64String(parts[1]);
+        var key = Convert.FromBase64String(parts[2]);
+        var computed = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, Algorithm, key.Length);
+
+        return CryptographicOperations.FixedTimeEquals(computed, key);
     }
 }

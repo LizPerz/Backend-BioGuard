@@ -84,7 +84,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         {
             Id = "user123",
             Correo = "test@test.com",
-            PasswordHash = BCryptHelper.HashPassword("Password123!"),
+            PasswordHash = PasswordHasher.Hash("Password123!"),
             Activo = true,
             PlanId = "plan1",
             Nombre = "Test",
@@ -397,7 +397,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
             PlanId = "plan1",
             Nombre = "Test",
             ApellidoPaterno = "User",
-            PasswordHash = BCryptHelper.HashPassword("OldPassword123!")
+            PasswordHash = PasswordHasher.Hash("OldPassword123!")
         };
 
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
