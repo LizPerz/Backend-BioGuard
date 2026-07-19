@@ -18,6 +18,7 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
     private readonly Mock<IMongoCollection<LecturaSensor>> _mockLecturas;
     private readonly Mock<IMongoCollection<EventoMetabolico>> _mockEventos;
     private readonly Mock<IMongoCollection<TrackingGps>> _mockTracking;
+    private readonly Mock<IMongoCollection<Paciente>> _mockPacientes;
 
     public SensoresIntegrationTests(CustomWebApplicationFactory factory)
     {
@@ -27,10 +28,35 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
         _mockLecturas = new Mock<IMongoCollection<LecturaSensor>>();
         _mockEventos = new Mock<IMongoCollection<EventoMetabolico>>();
         _mockTracking = new Mock<IMongoCollection<TrackingGps>>();
+        _mockPacientes = new Mock<IMongoCollection<Paciente>>();
 
         _mockDb.Setup(db => db.LecturasSensores).Returns(_mockLecturas.Object);
         _mockDb.Setup(db => db.EventosMetabolicos).Returns(_mockEventos.Object);
         _mockDb.Setup(db => db.TrackingGps).Returns(_mockTracking.Object);
+        _mockDb.Setup(db => db.Pacientes).Returns(_mockPacientes.Object);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente
+            {
+                Id = "123456789012345678901234",
+                UsuarioWebId = "user123",
+                Nombre = "Paciente Test"
+            });
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new List<Paciente>
+            {
+                new()
+                {
+                    Id = "123456789012345678901234",
+                    UsuarioWebId = "user123",
+                    Nombre = "Paciente Test"
+                }
+            });
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BioGuard.Api.Services;
@@ -54,6 +55,13 @@ public class PacientesController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+            return Forbid();
+
         var paciente = await _pacienteService.GetByIdAsync(id);
         if (paciente == null) return NotFound();
 
@@ -69,6 +77,13 @@ public class PacientesController : ControllerBase
     [HttpGet("by-usuario/{usuarioWebId}")]
     public async Task<IActionResult> GetByUsuario(string usuarioWebId)
     {
+        var currentUserId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(currentUserId)) return Unauthorized();
+
+        if (role != "dueno" || currentUserId != usuarioWebId)
+            return Forbid();
+
         var pacientes = await _pacienteService.GetAllByUsuarioAsync(usuarioWebId);
         var response = pacientes.Select(p => new PacienteResponse(
             p.Id, p.Nombre, p.Biometria?.EsDiabetico ?? false,
@@ -83,6 +98,7 @@ public class PacientesController : ControllerBase
     /// MÓDULO 3: Crear paciente + generar QR y código
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Crear([FromBody] CrearPacienteRequest request)
     {
         var usuarioId = User.FindFirst("sub")?.Value;
@@ -97,8 +113,15 @@ public class PacientesController : ControllerBase
     /// MÓDULO 3: Editar nombre del paciente
     /// </summary>
     [HttpPut("{id}")]
+    [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Editar(string id, [FromBody] UpdateNombreRequest request)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(id, usuarioId, "dueno"))
+            return Forbid();
+
         var result = await _pacienteService.UpdateNombreAsync(id, request.Nombre);
         if (!result) return NotFound();
         return Ok(new { message = "Paciente actualizado" });
@@ -109,8 +132,15 @@ public class PacientesController : ControllerBase
     /// MÓDULO 3: Desvincular paciente + borrar datos
     /// </summary>
     [HttpDelete("{id}")]
+    [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Eliminar(string id)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(id, usuarioId, "dueno"))
+            return Forbid();
+
         var result = await _pacienteService.EliminarAsync(id);
         if (!result) return NotFound();
         return NoContent();
@@ -166,6 +196,13 @@ public class PacientesController : ControllerBase
     [HttpGet("{id}/dispositivo")]
     public async Task<IActionResult> ObtenerDispositivo(string id)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+            return Forbid();
+
         var dispositivo = await _dispositivoService.ObtenerPorPacienteAsync(id);
         if (dispositivo == null) return Ok(new { Vinculado = false });
         return Ok(new
@@ -176,5 +213,13 @@ public class PacientesController : ControllerBase
             dispositivo.Conectado,
             dispositivo.FechaVinculacion
         });
+    }
+
+    private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
+    {
+        if (role == "paciente") return pacienteId == userId;
+
+        var pacientes = await _pacienteService.GetAllByUsuarioAsync(userId);
+        return pacientes.Any(p => p.Id == pacienteId);
     }
 }

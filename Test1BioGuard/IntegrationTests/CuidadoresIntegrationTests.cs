@@ -77,7 +77,8 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
             Nombre = "Ana Garcia",
             Parentesco = "Hermana",
             PacienteId = "pac123",
-            CodigoAccesoQr = "CU-XYZ789"
+            CodigoAccesoQr = "CU-XYZ789",
+            UsuarioWebId = "user123"
         };
 
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
@@ -125,6 +126,17 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
     [Fact]
     public async Task Eliminar_CuidadorExiste_Retorna204()
     {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Cuidador>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(new Cuidador
+            {
+                Id = "cuid123",
+                Nombre = "Ana Garcia",
+                PacienteId = "pac123",
+                UsuarioWebId = "user123"
+            });
+
         var mockDeleteResult = new Mock<DeleteResult>();
         mockDeleteResult.Setup(r => r.DeletedCount).Returns(1);
 
@@ -148,7 +160,8 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
         {
             Id = "cuid123",
             Nombre = "Ana Garcia",
-            CodigoAccesoQr = "CU-QR456"
+            CodigoAccesoQr = "CU-QR456",
+            UsuarioWebId = "user123"
         };
 
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
@@ -255,6 +268,18 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
     [Fact]
     public async Task Editar_DatosValidos_Retorna200()
     {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Cuidador>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(new Cuidador
+            {
+                Id = "cuid123",
+                Nombre = "Ana Garcia",
+                Parentesco = "Hermana",
+                PacienteId = "pac123",
+                UsuarioWebId = "user123"
+            });
+
         var mockUpdateResult = new Mock<UpdateResult>();
         mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
 
@@ -306,7 +331,8 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
         {
             Id = "cuid123",
             Nombre = "Ana Garcia",
-            CodigoAccesoQr = "CU-OLD123"
+            CodigoAccesoQr = "CU-OLD123",
+            UsuarioWebId = "user123"
         };
 
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(

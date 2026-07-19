@@ -39,6 +39,19 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
         _mockDb.Setup(db => db.TrackingGps).Returns(_mockTracking.Object);
         _mockDb.Setup(db => db.Notificaciones).Returns(_mockNotificaciones.Object);
         _mockDb.Setup(db => db.Dispositivos).Returns(_mockDispositivos.Object);
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new List<Paciente>
+            {
+                new()
+                {
+                    Id = "123456789012345678901234",
+                    UsuarioWebId = "user123",
+                    Nombre = "Paciente Test"
+                }
+            });
     }
 
     [Fact]
