@@ -68,6 +68,8 @@ public class PacienteService
         await _db.DeleteManyAsync(_db.TrackingGps, t => t.Meta.PacienteId == pacienteId);
         await _db.DeleteManyAsync(_db.Notificaciones, n => n.PacienteId == pacienteId);
         await _db.DeleteManyAsync(_db.Dispositivos, d => d.PacienteId == pacienteId);
+        await _db.DeleteManyAsync(_db.Medicamentos, m => m.PacienteId == pacienteId);
+        await _db.DeleteManyAsync(_db.Alertas, a => a.PacienteId == pacienteId);
 
         var result = await _db.Pacientes.DeleteOneAsync(p => p.Id == pacienteId);
         return result.DeletedCount > 0;

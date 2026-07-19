@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BioGuard.Api.Services;
@@ -74,6 +75,39 @@ public class DispositivosController : ControllerBase
             dispositivo.FechaVinculacion
         });
     }
+
+    /// <summary>
+    /// PUT /api/Dispositivos/{id} [MÓVIL]
+    /// MÓDULO 3: Actualizar nombre del dispositivo
+    /// </summary>
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Actualizar(string id, [FromBody] ActualizarDispositivoRequest request)
+    {
+        var pacienteId = User.FindFirst("paciente_id")?.Value;
+        if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
+
+        var result = await _dispositivoService.ActualizarAsync(id, request.Nombre);
+        if (!result) return NotFound();
+        return Ok(new { message = "Dispositivo actualizado" });
+    }
+
+    /// <summary>
+    /// DELETE /api/Dispositivos/{id} [MÓVIL]
+    /// MÓDULO 3: Desvincular dispositivo
+    /// </summary>
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Desvincular(string id)
+    {
+        var pacienteId = User.FindFirst("paciente_id")?.Value;
+        if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
+
+        var result = await _dispositivoService.EliminarAsync(id);
+        if (!result) return NotFound();
+        return NoContent();
+    }
 }
 
 public record HeartbeatRequest(string PacienteId);
+
+public record ActualizarDispositivoRequest(
+    [Required] [StringLength(200)] string Nombre);

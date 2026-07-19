@@ -39,4 +39,17 @@ public class DispositivoService
     {
         return await _db.FindFirstOrDefaultAsync(_db.Dispositivos, d => d.PacienteId == pacienteId);
     }
+
+    public async Task<bool> ActualizarAsync(string id, string nombre)
+    {
+        var update = Builders<Dispositivo>.Update.Set(d => d.NombreDispositivo, nombre);
+        var result = await _db.Dispositivos.UpdateOneAsync(d => d.Id == id, update);
+        return result.ModifiedCount > 0;
+    }
+
+    public async Task<bool> EliminarAsync(string id)
+    {
+        var result = await _db.Dispositivos.DeleteOneAsync(d => d.Id == id);
+        return result.DeletedCount > 0;
+    }
 }

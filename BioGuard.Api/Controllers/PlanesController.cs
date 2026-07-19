@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
 using BioGuard.Api.Config;
@@ -51,4 +53,119 @@ public class PlanesController : ControllerBase
             plan.GpsContinuo, plan.AiConsole, plan.Descripcion
         ));
     }
+
+    // ── Alta / Edición ────────────────────────────────────────
+    // POST /api/Planes [WEB] - Admin
+
+    [HttpPost]
+    [Authorize(Roles = "dueno")]
+    public async Task<IActionResult> Crear([FromBody] CrearPlanRequest request)
+    {
+        var plan = new Plan
+        {
+            Nombre = request.Nombre,
+            Precio = request.Precio,
+            PrecioMoneda = request.PrecioMoneda,
+            LimitePacientes = request.LimitePacientes,
+            LimiteCuidadores = request.LimiteCuidadores,
+            DiasHistorial = request.DiasHistorial,
+            GpsContinuo = request.GpsContinuo,
+            AiConsole = request.AiConsole,
+            Descripcion = request.Descripcion,
+            Activo = true,
+            Orden = request.Orden
+        };
+
+        await _db.Planes.InsertOneAsync(plan);
+        return Ok(new { PlanId = plan.Id, message = "Plan creado" });
+    }
+
+    // PUT /api/Planes/{id} [WEB] - Admin
+
+    [HttpPut("{id}")]
+    [Authorize(Roles = "dueno")]
+    public async Task<IActionResult> Editar(string id, [FromBody] CrearPlanRequest request)
+    {
+        var update = Builders<Plan>.Update
+            .Set(p => p.Nombre, request.Nombre)
+            .Set(p => p.Precio, request.Precio)
+            .Set(p => p.PrecioMoneda, request.PrecioMoneda)
+            .Set(p => p.LimitePacientes, request.LimitePacientes)
+            .Set(p => p.LimiteCuidadores, request.LimiteCuidadores)
+            .Set(p => p.DiasHistorial, request.DiasHistorial)
+            .Set(p => p.GpsContinuo, request.GpsContinuo)
+            .Set(p => p.AiConsole, request.AiConsole)
+            .Set(p => p.Descripcion, request.Descripcion)
+            .Set(p => p.Orden, request.Orden);
+
+        var result = await _db.Planes.UpdateOneAsync(p => p.Id == id, update);
+        if (result.ModifiedCount == 0) return NotFound();
+        return Ok(new { message = "Plan actualizado" });
+    }
+
+    // DELETE /api/Planes/{id} [WEB] - Admin
+
+    [HttpDelete("{id}")]
+    [Authorize(Roles = "dueno")]
+    public async Task<IActionResult> Eliminar(string id)
+    {
+        var update = Builders<Plan>.Update.Set(p => p.Activo, false);
+        var result = await _db.Planes.UpdateOneAsync(p => p.Id == id, update);
+        if (result.ModifiedCount == 0) return NotFound();
+        return Ok(new { message = "Plan desactivado" });
+    }
+
+    // POST /api/Planes/seed [WEB] - Admin
+
+    [HttpPost("seed")]
+    [Authorize(Roles = "dueno")]
+    public async Task<IActionResult> Seed()
+    {
+        var exists = await _db.FindToListAsync(_db.Planes, p => p.Activo == true);
+        if (exists.Any()) return BadRequest(new { message = "Ya existen planes activos" });
+
+        var planes = new List<Plan>
+        {
+            new()
+            {
+                Nombre = "Gratis", Precio = 0m, PrecioMoneda = "USD",
+                LimitePacientes = 1, LimiteCuidadores = 1, DiasHistorial = 7,
+                GpsContinuo = false, AiConsole = false, Activo = true, Orden = 1,
+                Descripcion = "Plan básico con funciones limitadas"
+            },
+            new()
+            {
+                Nombre = "Familiar", Precio = 9.99m, PrecioMoneda = "USD",
+                LimitePacientes = 1, LimiteCuidadores = 3, DiasHistorial = 30,
+                GpsContinuo = true, AiConsole = false, Activo = true, Orden = 2,
+                Descripcion = "Plan familiar con GPS y hasta 3 cuidadores"
+            },
+            new()
+            {
+                Nombre = "Pro", Precio = 19.99m, PrecioMoneda = "USD",
+                LimitePacientes = 1, LimiteCuidadores = 5, DiasHistorial = 90,
+                GpsContinuo = true, AiConsole = true, Activo = true, Orden = 3,
+                Descripcion = "Plan profesional con AI Console y funciones avanzadas"
+            }
+        };
+
+        foreach (var plan in planes)
+        {
+            await _db.Planes.InsertOneAsync(plan);
+        }
+
+        return Ok(new { message = "Planes sembrados", total = planes.Count });
+    }
 }
+
+public record CrearPlanRequest(
+    [Required] string Nombre,
+    [Required] decimal Precio,
+    string PrecioMoneda = "USD",
+    int LimitePacientes = 1,
+    int LimiteCuidadores = 0,
+    int DiasHistorial = 30,
+    bool GpsContinuo = false,
+    bool AiConsole = false,
+    [Required] string Descripcion = "",
+    int Orden = 1);

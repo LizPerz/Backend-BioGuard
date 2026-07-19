@@ -21,6 +21,8 @@ public interface IMongoDbContext
     IMongoCollection<ModeloMl> ModelosMl { get; }
     IMongoCollection<FcmToken> FcmTokens { get; }
     IMongoCollection<RefreshToken> RefreshTokens { get; }
+    IMongoCollection<Medicamento> Medicamentos { get; }
+    IMongoCollection<Alerta> Alertas { get; }
 
     Task<T?> FindFirstOrDefaultAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter);
     Task<List<T>> FindToListAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter);

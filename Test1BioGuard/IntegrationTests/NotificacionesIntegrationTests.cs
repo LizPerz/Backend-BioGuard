@@ -105,4 +105,70 @@ public class NotificacionesIntegrationTests : IClassFixture<CustomWebApplication
         var doc = JsonDocument.Parse(json);
         doc.RootElement.GetProperty("message").GetString().Should().Be("Notificación creada");
     }
+
+    // ── GET /api/Notificaciones (all) ───────────────────────
+
+    [Fact]
+    public async Task Listar_ConNotificaciones_Retorna200()
+    {
+        var notificaciones = new List<Notificacion>
+        {
+            new() { Id = "n1", PacienteId = "pac1", Titulo = "Alerta", Mensaje = "X", Leida = false, FechaEnvio = DateTime.UtcNow }
+        };
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                It.IsAny<IMongoCollection<Notificacion>>(),
+                It.IsAny<FilterDefinition<Notificacion>>(),
+                It.IsAny<SortDefinition<Notificacion>>(),
+                It.IsAny<int?>(),
+                It.IsAny<int?>()))
+            .ReturnsAsync(notificaciones);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateDuenoToken());
+
+        var response = await _client.GetAsync("/api/Notificaciones");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Listar_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Notificaciones");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    // ── DELETE /api/Notificaciones/{id} ─────────────────────
+
+    [Fact]
+    public async Task Eliminar_NotificacionExiste_Retorna204()
+    {
+        var mockResult = new Mock<DeleteResult>();
+        mockResult.Setup(r => r.DeletedCount).Returns(1);
+
+        _mockNotificaciones.Setup(c => c.DeleteOneAsync(
+                It.IsAny<FilterDefinition<Notificacion>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResult.Object);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateDuenoToken());
+
+        var response = await _client.DeleteAsync("/api/Notificaciones/n1");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Eliminar_SinToken_Retorna401()
+    {
+        var response = await _client.DeleteAsync("/api/Notificaciones/n1");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }

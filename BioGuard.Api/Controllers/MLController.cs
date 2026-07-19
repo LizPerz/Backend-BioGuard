@@ -106,7 +106,7 @@ public class MLController : ControllerBase
 
     /// <summary>
     /// POST /api/ML/entrenar [WEB]
-    /// MÓDULO 6: Disparar re-entrenamiento del modelo
+    /// MÓDULO 6: Disparar entrenamiento del modelo
     /// </summary>
     [HttpPost("entrenar")]
     public async Task<IActionResult> EntrenarModelo([FromBody] EntrenarModeloRequest request)
@@ -122,6 +122,56 @@ public class MLController : ControllerBase
 
         var result = await _mlService.CrearModeloAsync(modelo);
         return Ok(new { ModeloId = result.Id, message = "Entrenamiento iniciado" });
+    }
+
+    /// <summary>
+    /// POST /api/ML/reentrenar [WEB]
+    /// MÓDULO 6: Re-entrenamiento del modelo activo
+    /// </summary>
+    [HttpPost("reentrenar")]
+    public async Task<IActionResult> ReentrenarModelo([FromBody] EntrenarModeloRequest request)
+    {
+        var modeloActivo = await _mlService.ObtenerModeloActivoAsync();
+
+        var modelo = new ModeloMl
+        {
+            Version = request.Version,
+            Accuracy = modeloActivo?.Accuracy ?? 0.0,
+            Precision = modeloActivo?.Precision ?? 0.0,
+            Recall = modeloActivo?.Recall ?? 0.0,
+            F1Score = modeloActivo?.F1Score ?? 0.0,
+            Activo = false,
+            FechaEntrenamiento = DateTime.UtcNow,
+            Descripcion = request.Descripcion
+        };
+
+        var result = await _mlService.CrearModeloAsync(modelo);
+        return Ok(new { ModeloId = result.Id, message = "Re-entrenamiento iniciado" });
+    }
+
+    /// <summary>
+    /// POST /api/ML/diagnosticar [WEB]
+    /// MÓDULO 6: Diagnosticar estado del paciente con ML
+    /// </summary>
+    [HttpPost("diagnosticar")]
+    public async Task<IActionResult> Diagnosticar([FromBody] DiagnosticarRequest request)
+    {
+        var predicciones = await _mlService.ObtenerPrediccionesAsync(request.PacienteId);
+        var prediccion = predicciones.FirstOrDefault();
+
+        if (prediccion == null)
+            return Ok(new { message = "Sin datos suficientes para diagnóstico" });
+
+        return Ok(new
+        {
+            PacienteId = request.PacienteId,
+            prediccion.NivelRiesgo,
+            Probabilidad = prediccion.ProbabilidadPico,
+            prediccion.Recomendacion,
+            prediccion.HorasEstimadas,
+            prediccion.FechaPrediccion,
+            prediccion.ModeloVersion
+        });
     }
 
     /// <summary>
@@ -148,3 +198,5 @@ public class MLController : ControllerBase
 }
 
 public record EntrenarModeloRequest(string Version, string Descripcion);
+
+public record DiagnosticarRequest(string PacienteId);

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BioGuard.Api.Services;
@@ -7,7 +8,7 @@ namespace BioGuard.Api.Controllers;
 
 /// <summary>
 /// MÓDULO 5: Notificaciones Push
-/// ENDPOINT MÓVIL
+/// ENDPOINT WEB + MÓVIL
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -24,6 +25,22 @@ public class NotificacionesController : ControllerBase
     // ── Consulta ──────────────────────────────────────────────
 
     /// <summary>
+    /// GET /api/Notificaciones [WEB]
+    /// MÓDULO 5: Obtener todas las notificaciones del usuario logueado
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> Listar()
+    {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        var notificaciones = await _notificacionService.ObtenerPorUsuarioAsync(usuarioId);
+        var response = notificaciones.Select(n => new NotificacionResponse(
+            n.Id, n.Titulo, n.Mensaje, n.Leida, n.FechaEnvio));
+        return Ok(response);
+    }
+
+    /// <summary>
     /// GET /api/Notificaciones/by-paciente/{pacienteId} [MÓVIL]
     /// MÓDULO 5: Obtener notificaciones del paciente
     /// </summary>
@@ -31,6 +48,26 @@ public class NotificacionesController : ControllerBase
     public async Task<IActionResult> ObtenerPorPaciente(string pacienteId)
     {
         var notificaciones = await _notificacionService.ObtenerPorPacienteAsync(pacienteId);
+        var response = notificaciones.Select(n => new NotificacionResponse(
+            n.Id, n.Titulo, n.Mensaje, n.Leida, n.FechaEnvio));
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// GET /api/Notificaciones/by-usuario/{usuarioId} [WEB]
+    /// MÓDULO 5: Obtener notificaciones por usuario web
+    /// </summary>
+    [HttpGet("by-usuario/{usuarioId}")]
+    public async Task<IActionResult> ObtenerPorUsuario(string usuarioId)
+    {
+        var currentUserId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(currentUserId)) return Unauthorized();
+
+        if (role == "dueno" && currentUserId != usuarioId)
+            return Forbid();
+
+        var notificaciones = await _notificacionService.ObtenerPorUsuarioAsync(usuarioId);
         var response = notificaciones.Select(n => new NotificacionResponse(
             n.Id, n.Titulo, n.Mensaje, n.Leida, n.FechaEnvio));
         return Ok(response);
@@ -64,6 +101,18 @@ public class NotificacionesController : ControllerBase
             request.CuidadorId, request.UsuarioWebId);
 
         return Ok(new { NotificacionId = notificacion.Id, message = "Notificación creada" });
+    }
+
+    /// <summary>
+    /// DELETE /api/Notificaciones/{id} [WEB]
+    /// MÓDULO 5: Eliminar notificación
+    /// </summary>
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Eliminar(string id)
+    {
+        var result = await _notificacionService.EliminarAsync(id);
+        if (!result) return NotFound();
+        return NoContent();
     }
 }
 

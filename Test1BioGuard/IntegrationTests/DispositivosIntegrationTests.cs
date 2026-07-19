@@ -134,4 +134,63 @@ public class DispositivosIntegrationTests : IClassFixture<CustomWebApplicationFa
         var doc = JsonDocument.Parse(json);
         doc.RootElement.GetProperty("message").GetString().Should().Be("Heartbeat recibido");
     }
+
+    // ── PUT /api/Dispositivos/{id} ─────────────────────────
+
+    [Fact]
+    public async Task Actualizar_DispositivoExiste_Retorna200()
+    {
+        var pacienteId = "123456789012345678901234";
+        var mockResult = new Mock<UpdateResult>();
+        mockResult.Setup(r => r.ModifiedCount).Returns(1);
+
+        _mockDispositivos.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<Dispositivo>>(),
+                It.IsAny<UpdateDefinition<Dispositivo>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResult.Object);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GeneratePacienteToken(pacienteId));
+
+        var request = new { Nombre = "Watch 7 Pro" };
+        var response = await _client.PutAsJsonAsync("/api/Dispositivos/disp1", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("message").GetString().Should().Be("Dispositivo actualizado");
+    }
+
+    // ── DELETE /api/Dispositivos/{id} ───────────────────────
+
+    [Fact]
+    public async Task Desvincular_DispositivoExiste_Retorna204()
+    {
+        var pacienteId = "123456789012345678901234";
+        var mockResult = new Mock<DeleteResult>();
+        mockResult.Setup(r => r.DeletedCount).Returns(1);
+
+        _mockDispositivos.Setup(c => c.DeleteOneAsync(
+                It.IsAny<FilterDefinition<Dispositivo>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResult.Object);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GeneratePacienteToken(pacienteId));
+
+        var response = await _client.DeleteAsync("/api/Dispositivos/disp1");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Desvincular_SinToken_Retorna401()
+    {
+        var response = await _client.DeleteAsync("/api/Dispositivos/disp1");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }

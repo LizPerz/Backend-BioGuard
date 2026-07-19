@@ -73,11 +73,18 @@ public class UsuariosWebService
             await _db.DeleteManyAsync(_db.TrackingGps, t => t.Meta.PacienteId == paciente.Id);
             await _db.DeleteManyAsync(_db.Notificaciones, n => n.PacienteId == paciente.Id);
             await _db.DeleteManyAsync(_db.Dispositivos, d => d.PacienteId == paciente.Id);
+            await _db.DeleteManyAsync(_db.Medicamentos, m => m.PacienteId == paciente.Id);
+            await _db.DeleteManyAsync(_db.Alertas, a => a.PacienteId == paciente.Id);
         }
         await _db.DeleteManyAsync(_db.Pacientes, p => p.UsuarioWebId == usuarioId);
         await _db.DeleteManyAsync(_db.Pagos, p => p.UsuarioWebId == usuarioId);
 
         var result = await _db.UsuariosWeb.DeleteOneAsync(u => u.Id == usuarioId);
         return result.DeletedCount > 0;
+    }
+
+    public async Task<UsuarioWeb?> GetByEmailAsync(string correo)
+    {
+        return await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == correo);
     }
 }

@@ -17,6 +17,13 @@ public class NotificacionService
         return await _db.FindToListAsync(_db.Notificaciones, filter, sort, 50);
     }
 
+    public async Task<List<Notificacion>> ObtenerPorUsuarioAsync(string usuarioWebId)
+    {
+        var filter = Builders<Notificacion>.Filter.Eq(n => n.UsuarioWebId, usuarioWebId);
+        var sort = Builders<Notificacion>.Sort.Descending(n => n.FechaEnvio);
+        return await _db.FindToListAsync(_db.Notificaciones, filter, sort, 50);
+    }
+
     public async Task<bool> MarcarLeidaAsync(string notificacionId)
     {
         var update = Builders<Notificacion>.Update.Set(n => n.Leida, true);
@@ -42,5 +49,11 @@ public class NotificacionService
 
         await _db.Notificaciones.InsertOneAsync(notificacion);
         return notificacion;
+    }
+
+    public async Task<bool> EliminarAsync(string notificacionId)
+    {
+        var result = await _db.Notificaciones.DeleteOneAsync(n => n.Id == notificacionId);
+        return result.DeletedCount > 0;
     }
 }

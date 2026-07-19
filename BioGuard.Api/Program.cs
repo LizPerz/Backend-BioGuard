@@ -120,6 +120,8 @@ builder.Services.AddScoped<DispositivoService>();
 builder.Services.AddScoped<NotificacionService>();
 builder.Services.AddScoped<MLService>();
 builder.Services.AddScoped<AuditoriaService>();
+builder.Services.AddScoped<MedicamentoService>();
+builder.Services.AddScoped<AlertaService>();
 
 // =============================================
 // CONTROLLERS + SWAGGER

@@ -132,6 +132,26 @@ public class UsuariosWebController : ControllerBase
     // ── Cuenta ────────────────────────────────────────────────
 
     /// <summary>
+    /// GET /api/UsuariosWeb/by-email/{correo} [WEB]
+    /// MÓDULO 2: Buscar usuario por correo
+    /// </summary>
+    [HttpGet("by-email/{correo}")]
+    public async Task<IActionResult> GetByEmail(string correo)
+    {
+        var usuario = await _usuariosWebService.GetByEmailAsync(correo);
+        if (usuario == null) return NotFound();
+
+        return Ok(new
+        {
+            usuario.Id,
+            usuario.Nombre,
+            usuario.ApellidoPaterno,
+            usuario.ApellidoMaterno,
+            usuario.Correo
+        });
+    }
+
+    /// <summary>
     /// DELETE /api/UsuariosWeb/mi-cuenta [WEB]
     /// MÓDULO 2: Eliminar cuenta + todos los datos
     /// </summary>

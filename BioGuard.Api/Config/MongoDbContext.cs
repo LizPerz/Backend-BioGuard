@@ -37,6 +37,8 @@ public class MongoDbContext : IMongoDbContext
     public virtual IMongoCollection<ModeloMl> ModelosMl => _database.GetCollection<ModeloMl>("modelos_ml");
     public virtual IMongoCollection<FcmToken> FcmTokens => _database.GetCollection<FcmToken>("fcm_tokens");
     public virtual IMongoCollection<RefreshToken> RefreshTokens => _database.GetCollection<RefreshToken>("refresh_tokens");
+    public virtual IMongoCollection<Medicamento> Medicamentos => _database.GetCollection<Medicamento>("medicamentos");
+    public virtual IMongoCollection<Alerta> Alertas => _database.GetCollection<Alerta>("alertas");
 
     public virtual async Task<T?> FindFirstOrDefaultAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter)
     {

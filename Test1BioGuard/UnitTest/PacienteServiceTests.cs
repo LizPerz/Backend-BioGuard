@@ -147,6 +147,12 @@ public class PacienteServiceTests
         _mockDb.Setup(db => db.DeleteManyAsync(It.IsAny<IMongoCollection<Dispositivo>>(),
             It.IsAny<System.Linq.Expressions.Expression<Func<Dispositivo, bool>>>()))
             .ReturnsAsync(mockDeleteResult.Object);
+        _mockDb.Setup(db => db.DeleteManyAsync(It.IsAny<IMongoCollection<Medicamento>>(),
+            It.IsAny<System.Linq.Expressions.Expression<Func<Medicamento, bool>>>()))
+            .ReturnsAsync(mockDeleteResult.Object);
+        _mockDb.Setup(db => db.DeleteManyAsync(It.IsAny<IMongoCollection<Alerta>>(),
+            It.IsAny<System.Linq.Expressions.Expression<Func<Alerta, bool>>>()))
+            .ReturnsAsync(mockDeleteResult.Object);
 
         _mockCollection.Setup(c => c.DeleteOneAsync(
             It.IsAny<FilterDefinition<Paciente>>(),

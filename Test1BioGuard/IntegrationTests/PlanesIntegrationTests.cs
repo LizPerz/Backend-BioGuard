@@ -202,4 +202,140 @@ public class PlanesIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         doc.RootElement.GetProperty("gpsContinuo").GetBoolean().Should().BeFalse();
         doc.RootElement.GetProperty("aiConsole").GetBoolean().Should().BeFalse();
     }
+
+    // ── POST /api/Planes ────────────────────────────────────
+
+    [Fact]
+    public async Task Crear_DatosValidos_Retorna200()
+    {
+        _mockPlanes.Setup(c => c.InsertOneAsync(
+            It.IsAny<Plan>(),
+            It.IsAny<InsertOneOptions>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateDuenoToken());
+
+        var request = new
+        {
+            Nombre = "Nuevo Plan", Precio = 14.99m, PrecioMoneda = "USD",
+            LimitePacientes = 1, LimiteCuidadores = 3, DiasHistorial = 60,
+            GpsContinuo = true, AiConsole = false, Descripcion = "Plan nuevo", Orden = 4
+        };
+        var response = await _client.PostAsJsonAsync("/api/Planes", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("message").GetString().Should().Be("Plan creado");
+    }
+
+    [Fact]
+    public async Task Crear_SinToken_Retorna401()
+    {
+        var request = new { Nombre = "X", Precio = 9.99m, Descripcion = "X" };
+        var response = await _client.PostAsJsonAsync("/api/Planes", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    // ── PUT /api/Planes/{id} ────────────────────────────────
+
+    [Fact]
+    public async Task Editar_PlanExiste_Retorna200()
+    {
+        var mockResult = new Mock<UpdateResult>();
+        mockResult.Setup(r => r.ModifiedCount).Returns(1);
+        _mockPlanes.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<Plan>>(),
+                It.IsAny<UpdateDefinition<Plan>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResult.Object);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateDuenoToken());
+
+        var request = new
+        {
+            Nombre = "Plan Actualizado", Precio = 29.99m, PrecioMoneda = "USD",
+            LimitePacientes = 1, LimiteCuidadores = 5, DiasHistorial = 90,
+            GpsContinuo = true, AiConsole = true, Descripcion = "Actualizado", Orden = 2
+        };
+        var response = await _client.PutAsJsonAsync("/api/Planes/plan1", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // ── DELETE /api/Planes/{id} ─────────────────────────────
+
+    [Fact]
+    public async Task Eliminar_PlanExiste_Retorna200()
+    {
+        var mockResult = new Mock<UpdateResult>();
+        mockResult.Setup(r => r.ModifiedCount).Returns(1);
+        _mockPlanes.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<Plan>>(),
+                It.IsAny<UpdateDefinition<Plan>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResult.Object);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateDuenoToken());
+
+        var response = await _client.DeleteAsync("/api/Planes/plan1");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // ── POST /api/Planes/seed ───────────────────────────────
+
+    [Fact]
+    public async Task Seed_SinPlanesActivos_CreaPlanes()
+    {
+        _mockDb.Setup(db => db.FindToListAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(new List<Plan>());
+
+        _mockPlanes.Setup(c => c.InsertOneAsync(
+            It.IsAny<Plan>(),
+            It.IsAny<InsertOneOptions>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateDuenoToken());
+
+        var response = await _client.PostAsJsonAsync("/api/Planes/seed", new { });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("total").GetInt32().Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Seed_YaExistenPlanes_Retorna400()
+    {
+        var planes = new List<Plan> { new() { Id = "p1", Nombre = "Gratis", Activo = true } };
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(planes);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateDuenoToken());
+
+        var response = await _client.PostAsJsonAsync("/api/Planes/seed", new { });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
 }
