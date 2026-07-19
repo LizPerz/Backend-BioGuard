@@ -10,6 +10,7 @@ env:
   DOTNET_VERSION: '9.0.x'
   PROJECT_PATH: 'BioGuard.Api/BioGuard.Api.csproj'
   TEST_PATH: 'Test1BioGuard/Test1BioGuard.csproj'
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
 
 jobs:
   build-and-test:
@@ -49,6 +50,12 @@ jobs:
     needs: build-and-test
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
 
     steps:
       - name: Checkout
@@ -68,7 +75,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE_NAME }}
           tags: |
             type=sha
             type=ref,event=branch
@@ -83,3 +90,38 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: docker-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            docker pull ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+            docker stop bioguard-api || true
+            docker rm bioguard-api || true
+            docker run -d \
+              --name bioguard-api \
+              --restart unless-stopped \
+              -p 8080:8080 \
+              -e MONGODB_CONNECTION_STRING="${{ secrets.MONGODB_CONNECTION_STRING }}" \
+              -e JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}" \
+              -e ASPNETCORE_ENVIRONMENT=Production \
+              ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+
+      - name: Health check
+        run: |
+          sleep 15
+          curl -sf ${{ secrets.STAGING_HOST }}:8080/health || exit 1

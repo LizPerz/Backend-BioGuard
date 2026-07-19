@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BioGuard.Api.Services;
@@ -66,8 +67,13 @@ public class CuidadoresController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
         var cuidador = await _cuidadorService.ObtenerPorIdAsync(id);
         if (cuidador == null) return NotFound();
+        if (cuidador.UsuarioWebId != usuarioId) return Forbid();
+
         return Ok(new CuidadorResponse(
             cuidador.Id, cuidador.Nombre, cuidador.Parentesco,
             cuidador.PacienteId, cuidador.CodigoAccesoQr));
@@ -113,8 +119,16 @@ public class CuidadoresController : ControllerBase
     /// MÓDULO 4: Editar nombre y parentesco
     /// </summary>
     [HttpPut("{id}")]
+    [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Editar(string id, [FromBody] ActualizarCuidadorRequest request)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        var cuidador = await _cuidadorService.ObtenerPorIdAsync(id);
+        if (cuidador == null) return NotFound();
+        if (cuidador.UsuarioWebId != usuarioId) return Forbid();
+
         var result = await _cuidadorService.ActualizarAsync(id, request.Nombre, request.Parentesco);
         if (!result) return NotFound();
         return Ok(new { message = "Cuidador actualizado" });
@@ -125,8 +139,16 @@ public class CuidadoresController : ControllerBase
     /// MÓDULO 4: Revocar acceso del cuidador
     /// </summary>
     [HttpDelete("{id}")]
+    [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Eliminar(string id)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        var cuidador = await _cuidadorService.ObtenerPorIdAsync(id);
+        if (cuidador == null) return NotFound();
+        if (cuidador.UsuarioWebId != usuarioId) return Forbid();
+
         var result = await _cuidadorService.EliminarAsync(id);
         if (!result) return NotFound();
         return NoContent();

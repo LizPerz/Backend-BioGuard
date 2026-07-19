@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BioGuard.Api.Services;
@@ -15,10 +16,12 @@ namespace BioGuard.Api.Controllers;
 public class SensoresController : ControllerBase
 {
     private readonly SensorService _sensorService;
+    private readonly PacienteService _pacienteService;
 
-    public SensoresController(SensorService sensorService)
+    public SensoresController(SensorService sensorService, PacienteService pacienteService)
     {
         _sensorService = sensorService;
+        _pacienteService = pacienteService;
     }
 
     // ── Lecturas (Envío de datos) ─────────────────────────────
@@ -71,6 +74,13 @@ public class SensoresController : ControllerBase
     [HttpGet("lecturas/{pacienteId}")]
     public async Task<IActionResult> ObtenerLecturas(string pacienteId, [FromQuery] int limite = 100)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+            return Forbid();
+
         var lecturas = await _sensorService.ObtenerLecturasAsync(pacienteId, limite);
         var response = lecturas.Select(l => new
         {
@@ -92,6 +102,13 @@ public class SensoresController : ControllerBase
     public async Task<IActionResult> ObtenerLecturasRango(
         string pacienteId, [FromQuery] DateTime desde, [FromQuery] DateTime hasta)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+            return Forbid();
+
         var lecturas = await _sensorService.ObtenerLecturasRangoAsync(pacienteId, desde, hasta);
         var response = lecturas.Select(l => new
         {
@@ -114,6 +131,13 @@ public class SensoresController : ControllerBase
     [HttpGet("estadisticas/{pacienteId}")]
     public async Task<IActionResult> Estadisticas(string pacienteId)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+            return Forbid();
+
         var lecturas = await _sensorService.ObtenerLecturasAsync(pacienteId, 100);
         if (!lecturas.Any()) return Ok(new { message = "Sin datos" });
 
@@ -137,6 +161,13 @@ public class SensoresController : ControllerBase
     [HttpGet("estadisticas/{pacienteId}/tendencia")]
     public async Task<IActionResult> Tendencia(string pacienteId, [FromQuery] string periodo = "diario")
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+            return Forbid();
+
         var desde = periodo switch
         {
             "semanal" => DateTime.UtcNow.AddDays(-7),
@@ -181,6 +212,13 @@ public class SensoresController : ControllerBase
     [HttpGet("eventos/{pacienteId}")]
     public async Task<IActionResult> ObtenerEventos(string pacienteId, [FromQuery] int limite = 50)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+            return Forbid();
+
         var eventos = await _sensorService.ObtenerEventosAsync(pacienteId, limite);
         var response = eventos.Select(e => new EventoMetabolicoResponse(
             e.Id, e.NivelRiesgo, e.ProbabilidadMl, e.Descripcion,
@@ -195,6 +233,13 @@ public class SensoresController : ControllerBase
     [HttpGet("eventos/{pacienteId}/resumen")]
     public async Task<IActionResult> ResumenEventos(string pacienteId)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+            return Forbid();
+
         var eventos = await _sensorService.ObtenerEventosAsync(pacienteId, 100);
         return Ok(new
         {
@@ -227,6 +272,13 @@ public class SensoresController : ControllerBase
     [HttpGet("lecturas/{pacienteId}/exportar-pdf")]
     public async Task<IActionResult> ExportarPDF(string pacienteId)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+            return Forbid();
+
         var lecturas = await _sensorService.ObtenerLecturasAsync(pacienteId, 1000);
         return Ok(new { message = $"PDF generado con {lecturas.Count} registros", DescargaUrl = $"/api/sensores/lecturas/{pacienteId}/exportar-pdf/descarga" });
     }
@@ -275,6 +327,13 @@ public class SensoresController : ControllerBase
     [HttpGet("tracking/{pacienteId}/actual")]
     public async Task<IActionResult> TrackingActual(string pacienteId)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+            return Forbid();
+
         var ubicacion = await _sensorService.ObtenerUltimaUbicacionAsync(pacienteId);
         if (ubicacion == null) return NotFound(new { message = "Sin ubicación" });
 
@@ -293,6 +352,13 @@ public class SensoresController : ControllerBase
     public async Task<IActionResult> TrackingRuta(
         string pacienteId, [FromQuery] DateTime desde, [FromQuery] DateTime hasta)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+            return Forbid();
+
         var puntos = await _sensorService.ObtenerTrackingRangoAsync(pacienteId, desde, hasta);
         var response = puntos.Select(p => new TrackingResponse(
             p.Ubicacion.Coordinates[0],
@@ -300,6 +366,14 @@ public class SensoresController : ControllerBase
             p.Timestamp,
             p.EsEmergencia));
         return Ok(response);
+    }
+    private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
+    {
+        if (role == "paciente") return pacienteId == userId;
+        if (role == "cuidador") return true;
+
+        var paciente = await _pacienteService.GetByIdAsync(pacienteId);
+        return paciente?.UsuarioWebId == userId;
     }
 }
 

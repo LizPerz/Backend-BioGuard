@@ -205,6 +205,8 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
     context.Response.Headers.Append("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     context.Response.Headers.Append("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    context.Response.Headers.Append("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' wss: ws:; frame-ancestors 'none'");
+    context.Response.Headers.Remove("X-Powered-By");
     await next();
 });
 
@@ -216,6 +218,7 @@ app.UseAuthorization();
 // =============================================
 app.MapControllers();
 app.MapHub<BioGuardHub>("/hubs/bioguard");
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
 app.Run();
 

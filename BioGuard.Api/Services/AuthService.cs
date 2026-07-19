@@ -208,7 +208,11 @@ public class AuthService
 
         if (string.IsNullOrEmpty(user.TwoFactorCode)) return null;
         if (user.TwoFactorExpira == null || user.TwoFactorExpira < DateTime.UtcNow) return null;
-        if (user.TwoFactorCode != request.Codigo) return null;
+
+        var codeMatch = CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(user.TwoFactorCode),
+            Encoding.UTF8.GetBytes(request.Codigo));
+        if (!codeMatch) return null;
 
         var update = Builders<UsuarioWeb>.Update
             .Set(u => u.TwoFactorCode, null)
