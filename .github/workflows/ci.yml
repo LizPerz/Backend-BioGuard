@@ -46,7 +46,7 @@ jobs:
           path: '**/*.trx'
 
   docker-build:
-    name: Build Docker Image
+    name: Build & Push Docker Image
     needs: build-and-test
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
@@ -55,7 +55,7 @@ jobs:
       packages: write
 
     outputs:
-      image_tag: ${{ steps.meta.outputs.tags }}
+      image_digest: ${{ steps.push.outputs.digest }}
 
     steps:
       - name: Checkout
@@ -71,57 +71,35 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha
-            type=ref,event=branch
-
       - name: Build and push
-        uses: docker/build-push-action@v5
+        id: push
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: BioGuard.Api/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy-staging:
-    name: Deploy to Staging
+  deploy-production:
+    name: Deploy to DigitalOcean App Platform
     needs: docker-build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
-    environment: staging
+    environment: production
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+      - name: Deploy to App Platform
+        uses: digitalocean/app_action/deploy@v2
+        env:
+          IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
+          MONGODB_CONNECTION_STRING: ${{ secrets.MONGODB_CONNECTION_STRING }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
         with:
-          host: ${{ secrets.STAGING_HOST }}
-          username: ${{ secrets.STAGING_USER }}
-          key: ${{ secrets.STAGING_SSH_KEY }}
-          script: |
-            docker pull ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-            docker stop bioguard-api || true
-            docker rm bioguard-api || true
-            docker run -d \
-              --name bioguard-api \
-              --restart unless-stopped \
-              -p 8080:8080 \
-              -e MONGODB_CONNECTION_STRING="${{ secrets.MONGODB_CONNECTION_STRING }}" \
-              -e JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}" \
-              -e ASPNETCORE_ENVIRONMENT=Production \
-              ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-
-      - name: Health check
-        run: |
-          sleep 15
-          curl -sf ${{ secrets.STAGING_HOST }}:8080/health || exit 1
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}

@@ -1,0 +1,34 @@
+name: bioguard-api
+region: nyc
+
+services:
+  - name: bioguard-api
+    image:
+      registry_type: GHCR
+      registry: LizPerz
+      repository: Backend-BioGuard
+      digest: ${IMAGE_DIGEST}
+
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 10
+      period_seconds: 30
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+
+    envs:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://+:8080
+      - key: MONGODB_CONNECTION_STRING
+        value: ${MONGODB_CONNECTION_STRING}
+        type: SECRET
+      - key: JWT_SECRET_KEY
+        value: ${JWT_SECRET_KEY}
+        type: SECRET
