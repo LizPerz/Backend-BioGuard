@@ -150,4 +150,18 @@ public class PagosIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         var response = await _client.GetAsync("/api/Pagos/historial");
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
+
+    [Fact]
+    public async Task CrearSesion_SinToken_Retorna401()
+    {
+        var response = await _client.PostAsJsonAsync("/api/Pagos/crear-sesion", new { });
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Recibo_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Pagos/p1/recibo");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }

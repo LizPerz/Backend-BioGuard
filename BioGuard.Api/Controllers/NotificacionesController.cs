@@ -16,10 +16,12 @@ namespace BioGuard.Api.Controllers;
 public class NotificacionesController : ControllerBase
 {
     private readonly NotificacionService _notificacionService;
+    private readonly PacienteService _pacienteService;
 
-    public NotificacionesController(NotificacionService notificacionService)
+    public NotificacionesController(NotificacionService notificacionService, PacienteService pacienteService)
     {
         _notificacionService = notificacionService;
+        _pacienteService = pacienteService;
     }
 
     // ── Consulta ──────────────────────────────────────────────
@@ -47,6 +49,13 @@ public class NotificacionesController : ControllerBase
     [HttpGet("by-paciente/{pacienteId}")]
     public async Task<IActionResult> ObtenerPorPaciente(string pacienteId)
     {
+        var currentUserId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(currentUserId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(pacienteId, currentUserId, role!))
+            return Forbid();
+
         var notificaciones = await _notificacionService.ObtenerPorPacienteAsync(pacienteId);
         var response = notificaciones.Select(n => new NotificacionResponse(
             n.Id, n.Titulo, n.Mensaje, n.Leida, n.FechaEnvio));
@@ -94,8 +103,16 @@ public class NotificacionesController : ControllerBase
     /// MÓDULO 5: Crear notificación + enviar por FCM
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = "dueno,paciente")]
     public async Task<IActionResult> Crear([FromBody] CrearNotificacionRequest request)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (role == "paciente" && usuarioId != request.PacienteId)
+            return Forbid();
+
         var notificacion = await _notificacionService.CrearAsync(
             request.PacienteId, request.Titulo, request.Mensaje, request.Tipo,
             request.CuidadorId, request.UsuarioWebId);
@@ -113,6 +130,15 @@ public class NotificacionesController : ControllerBase
         var result = await _notificacionService.EliminarAsync(id);
         if (!result) return NotFound();
         return NoContent();
+    }
+
+    private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
+    {
+        if (role == "paciente") return pacienteId == userId;
+        if (role == "cuidador") return true;
+
+        var paciente = await _pacienteService.GetByIdAsync(pacienteId);
+        return paciente?.UsuarioWebId == userId;
     }
 }
 

@@ -8,9 +8,11 @@ namespace Test1BioGuard.SecurityTests;
 public class InputValidationTests : IClassFixture<IntegrationTests.CustomWebApplicationFactory>
 {
     private readonly HttpClient _client;
+    private readonly IntegrationTests.CustomWebApplicationFactory factory;
 
     public InputValidationTests(IntegrationTests.CustomWebApplicationFactory factory)
     {
+        this.factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -95,5 +97,145 @@ public class InputValidationTests : IClassFixture<IntegrationTests.CustomWebAppl
         var response = await _client.PutAsJsonAsync("/api/Auth/cambiar-password", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    // ── Medicamentos DTO Validation ────────────────────────
+
+    [Fact]
+    public async Task CrearMedicamento_NombreVacio_Retorna400()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                IntegrationTests.TestTokenHelper.GenerateDuenoToken());
+
+        var request = new { PacienteId = "pac123", Nombre = "", Dosis = "500mg", Horario = "8:00" };
+
+        var response = await client.PostAsJsonAsync("/api/Medicamentos", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CrearMedicamento_DosisVacia_Retorna400()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                IntegrationTests.TestTokenHelper.GenerateDuenoToken());
+
+        var request = new { PacienteId = "pac123", Nombre = "Metformina", Dosis = "", Horario = "8:00" };
+
+        var response = await client.PostAsJsonAsync("/api/Medicamentos", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CrearMedicamento_PacienteIdVacio_Retorna400()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                IntegrationTests.TestTokenHelper.GenerateDuenoToken());
+
+        var request = new { PacienteId = "", Nombre = "Metformina", Dosis = "500mg", Horario = "8:00" };
+
+        var response = await client.PostAsJsonAsync("/api/Medicamentos", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CrearMedicamento_HorarioVacio_Retorna400()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                IntegrationTests.TestTokenHelper.GenerateDuenoToken());
+
+        var request = new { PacienteId = "pac123", Nombre = "Metformina", Dosis = "500mg", Horario = "" };
+
+        var response = await client.PostAsJsonAsync("/api/Medicamentos", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // ── Alertas DTO Validation ─────────────────────────────
+
+    [Fact]
+    public async Task CrearAlerta_PacienteIdVacio_Retorna400()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                IntegrationTests.TestTokenHelper.GenerateDuenoToken());
+
+        var request = new
+        {
+            PacienteId = "", Tipo = "glucosa", Nivel = "critico",
+            Titulo = "Alerta", Mensaje = "Test"
+        };
+
+        var response = await client.PostAsJsonAsync("/api/Alertas", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CrearAlerta_TituloVacio_Retorna400()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                IntegrationTests.TestTokenHelper.GenerateDuenoToken());
+
+        var request = new
+        {
+            PacienteId = "pac123", Tipo = "glucosa", Nivel = "critico",
+            Titulo = "", Mensaje = "Test"
+        };
+
+        var response = await client.PostAsJsonAsync("/api/Alertas", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CrearAlerta_NivelVacio_Retorna400()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                IntegrationTests.TestTokenHelper.GenerateDuenoToken());
+
+        var request = new
+        {
+            PacienteId = "pac123", Tipo = "glucosa", Nivel = "",
+            Titulo = "Alerta", Mensaje = "Test"
+        };
+
+        var response = await client.PostAsJsonAsync("/api/Alertas", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CrearAlerta_MensajeVacio_Retorna400()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                IntegrationTests.TestTokenHelper.GenerateDuenoToken());
+
+        var request = new
+        {
+            PacienteId = "pac123", Tipo = "glucosa", Nivel = "critico",
+            Titulo = "Alerta", Mensaje = ""
+        };
+
+        var response = await client.PostAsJsonAsync("/api/Alertas", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 }

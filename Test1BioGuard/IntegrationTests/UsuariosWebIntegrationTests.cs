@@ -312,4 +312,88 @@ public class UsuariosWebIntegrationTests : IClassFixture<CustomWebApplicationFac
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
+
+    [Fact]
+    public async Task SubirFoto_SinToken_Retorna401()
+    {
+        var response = await _client.PutAsJsonAsync("/api/UsuariosWeb/mi-perfil/foto", new { FotoBase64 = "data:image/png;base64,abc123" });
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task CambiarPlan_SinToken_Retorna401()
+    {
+        var response = await _client.PutAsJsonAsync("/api/UsuariosWeb/cambiar-plan", new { PlanNombre = "Premium" });
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetByEmail_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/UsuariosWeb/by-email/test@test.com");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetByEmail_UsuarioExiste_Retorna200()
+    {
+        var usuario = new UsuarioWeb
+        {
+            Id = "user456", Nombre = "Maria", ApellidoPaterno = "Garcia",
+            ApellidoMaterno = "Lopez", Correo = "maria@test.com"
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(usuario);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken("user123"));
+
+        var response = await _client.GetAsync("/api/UsuariosWeb/by-email/maria@test.com");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("correo").GetString().Should().Be("maria@test.com");
+    }
+
+    [Fact]
+    public async Task GetByEmail_UsuarioNoExiste_Retorna404()
+    {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync((UsuarioWeb?)null);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken("user123"));
+
+        var response = await _client.GetAsync("/api/UsuariosWeb/by-email/inexistente@test.com");
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task EditarPerfil_SinToken_Retorna401()
+    {
+        var request = new UpdatePerfilRequest("Juan", "Perez", "Lopez");
+        var response = await _client.PutAsJsonAsync("/api/UsuariosWeb/mi-perfil", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task CambiarCorreo_SinToken_Retorna401()
+    {
+        var request = new CambiarCorreoRequest("nuevo@test.com");
+        var response = await _client.PutAsJsonAsync("/api/UsuariosWeb/mi-perfil/correo", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task MiPlan_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/UsuariosWeb/mi-plan");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }

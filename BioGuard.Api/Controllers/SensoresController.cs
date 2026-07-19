@@ -258,6 +258,9 @@ public class SensoresController : ControllerBase
     [HttpPut("eventos/{eventoId}/atender")]
     public async Task<IActionResult> AtenderEvento(string eventoId, [FromBody] AtenderEventoRequest request)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
         var result = await _sensorService.AtenderEventoAsync(eventoId, request.CuidadorId);
         if (!result) return NotFound();
         return Ok(new { message = "Evento atendido" });

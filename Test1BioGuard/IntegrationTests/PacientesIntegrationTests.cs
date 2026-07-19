@@ -364,4 +364,22 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
         doc.RootElement.GetProperty("message").GetString().Should().Be("QR regenerado");
         doc.RootElement.GetProperty("codigoAccesoQr").GetString().Should().NotBeNullOrEmpty();
     }
+
+    [Fact]
+    public async Task Crear_SinToken_Retorna401()
+    {
+        var request = new CrearPacienteRequest("Nuevo");
+        var response = await _client.PostAsJsonAsync("/api/Pacientes", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Editar_SinToken_Retorna401()
+    {
+        var request = new UpdateNombreRequest("Nombre");
+        var response = await _client.PutAsJsonAsync("/api/Pacientes/123456789012345678901234", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }

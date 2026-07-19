@@ -163,4 +163,62 @@ public class PacienteServiceTests
 
         result.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task GetAllByUsuarioAsync_ConPacientes_RetornaLista()
+    {
+        var pacientes = new List<Paciente>
+        {
+            new() { Id = "123456789012345678901234", UsuarioWebId = "user123", Nombre = "Paciente 1" },
+            new() { Id = "123456789012345678901235", UsuarioWebId = "user123", Nombre = "Paciente 2" }
+        };
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                _mockCollection.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(pacientes);
+
+        var result = await _service.GetAllByUsuarioAsync("user123");
+
+        result.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetAllByUsuarioAsync_SinPacientes_RetornaListaVacia()
+    {
+        _mockDb.Setup(db => db.FindToListAsync(
+                _mockCollection.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new List<Paciente>());
+
+        var result = await _service.GetAllByUsuarioAsync("user_sin_pacientes");
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task UpdateBiometriaAsync_DatosValidos_ActualizaBiometria()
+    {
+        var mockResult = new Mock<UpdateResult>();
+        mockResult.Setup(r => r.ModifiedCount).Returns(1);
+
+        _mockCollection.Setup(c => c.UpdateOneAsync(
+            It.IsAny<FilterDefinition<Paciente>>(),
+            It.IsAny<UpdateDefinition<Paciente>>(),
+            It.IsAny<UpdateOptions>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResult.Object);
+
+        var request = new BioGuard.Api.DTOs.UpdateBiometriaRequest(
+            Edad: 30, PesoKg: 75.5, EstaturaCm: 175.0,
+            EsDiabetico: false, FamiliaresDiabetes: false, ActividadFisica: "Moderada");
+
+        await _service.UpdateBiometriaAsync("123456789012345678901234", request);
+
+        _mockCollection.Verify(c => c.UpdateOneAsync(
+            It.IsAny<FilterDefinition<Paciente>>(),
+            It.IsAny<UpdateDefinition<Paciente>>(),
+            It.IsAny<UpdateOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

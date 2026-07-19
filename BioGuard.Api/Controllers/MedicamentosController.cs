@@ -92,8 +92,16 @@ public class MedicamentosController : ControllerBase
     /// ML crea "toma tu medicamento" al detectar pico crítico
     /// </summary>
     [HttpPost("trigger")]
+    [Authorize(Roles = "dueno,paciente")]
     public async Task<IActionResult> TriggerMedicamento([FromBody] CrearMedicamentoRequest request)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(request.PacienteId, usuarioId, role!))
+            return Forbid();
+
         var medicamento = await _medicamentoService.CrearAsync(
             request.PacienteId, request.Nombre, request.Dosis,
             request.Horario, request.Notas);

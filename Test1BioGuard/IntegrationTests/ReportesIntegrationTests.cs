@@ -95,6 +95,34 @@ public class ReportesIntegrationTests : IClassFixture<CustomWebApplicationFactor
     }
 
     [Fact]
+    public async Task HistorialAlertas_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Reportes/historial-alertas/123456789012345678901234");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task HistorialEventos_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Reportes/historial-eventos/123456789012345678901234");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task HistorialMedicamentos_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Reportes/historial-medicamentos/123456789012345678901234");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task HistorialLecturas_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Reportes/historial-lecturas/123456789012345678901234");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task HistorialAlertas_ConAlertas_Retorna200()
     {
         var pacienteId = "123456789012345678901234";

@@ -110,4 +110,80 @@ public class CuidadorServiceTests
         result.Should().StartWith("CU-");
         result.Should().HaveLength(11);
     }
+
+    [Fact]
+    public async Task ObtenerPorUsuarioAsync_ConCuidadores_RetornaLista()
+    {
+        var cuidadores = new List<Cuidador>
+        {
+            new() { Id = "c1", UsuarioWebId = "user123", Nombre = "María García", PacienteId = "pac1" },
+            new() { Id = "c2", UsuarioWebId = "user123", Nombre = "Carlos López", PacienteId = "pac1" }
+        };
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                _mockCollection.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(cuidadores);
+
+        var result = await _service.ObtenerPorUsuarioAsync("user123");
+
+        result.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ObtenerPorUsuarioAsync_SinCuidadores_RetornaListaVacia()
+    {
+        _mockDb.Setup(db => db.FindToListAsync(
+                _mockCollection.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(new List<Cuidador>());
+
+        var result = await _service.ObtenerPorUsuarioAsync("user_sin_cuidadores");
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ObtenerPorPacienteAsync_ConCuidadores_RetornaLista()
+    {
+        var cuidadores = new List<Cuidador>
+        {
+            new() { Id = "c1", PacienteId = "pac1", Nombre = "María García" }
+        };
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                _mockCollection.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(cuidadores);
+
+        var result = await _service.ObtenerPorPacienteAsync("pac1");
+
+        result.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task ObtenerPorPacienteAsync_SinCuidadores_RetornaListaVacia()
+    {
+        _mockDb.Setup(db => db.FindToListAsync(
+                _mockCollection.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(new List<Cuidador>());
+
+        var result = await _service.ObtenerPorPacienteAsync("pac_sin_cuidadores");
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ObtenerPorIdAsync_CuidadorNoExiste_RetornaNull()
+    {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                _mockCollection.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync((Cuidador?)null);
+
+        var result = await _service.ObtenerPorIdAsync("nonexistent");
+
+        result.Should().BeNull();
+    }
 }

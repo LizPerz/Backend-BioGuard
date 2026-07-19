@@ -104,6 +104,110 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
     }
 
     [Fact]
+    public async Task RecibirLectura_SinToken_Retorna401()
+    {
+        var request = new LecturaSensorRequest(75, 36.5, 12.0);
+        var response = await _client.PostAsJsonAsync("/api/Sensores/lectura", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task RecibirLecturaBatch_SinToken_Retorna401()
+    {
+        var request = new List<LecturaSensorRequest>
+        {
+            new(75, 36.5, 12.0),
+            new(80, 36.8, 14.0)
+        };
+        var response = await _client.PostAsJsonAsync("/api/Sensores/lectura-batch", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task CrearEvento_SinToken_Retorna401()
+    {
+        var request = new CrearEventoRequest(0.92, "Critico", "Pico detectado");
+        var response = await _client.PostAsJsonAsync("/api/Sensores/evento", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ObtenerEventos_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Sensores/eventos/123456789012345678901234");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ResumenEventos_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Sensores/eventos/123456789012345678901234/resumen");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task AtenderEvento_SinToken_Retorna401()
+    {
+        var request = new AtenderEventoRequest("cuidador1");
+        var response = await _client.PutAsJsonAsync("/api/Sensores/eventos/evt123/atender", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task InsertarTracking_SinToken_Retorna401()
+    {
+        var request = new TrackingGpsRequest(-99.1, 19.4, false);
+        var response = await _client.PostAsJsonAsync("/api/Sensores/tracking", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task InsertarTrackingBatch_SinToken_Retorna401()
+    {
+        var request = new List<TrackingGpsRequest>
+        {
+            new(-99.1, 19.4, false)
+        };
+        var response = await _client.PostAsJsonAsync("/api/Sensores/tracking-batch", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task TrackingActual_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Sensores/tracking/123456789012345678901234/actual");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task TrackingRuta_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Sensores/tracking/123456789012345678901234/ruta?desde=2024-01-01T00:00:00Z&hasta=2024-12-31T23:59:59Z");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ExportarPDF_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Sensores/lecturas/123456789012345678901234/exportar-pdf");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ObtenerLecturasRango_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Sensores/lecturas/123456789012345678901234/rango?desde=2024-01-01T00:00:00Z&hasta=2024-12-31T23:59:59Z");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Tendencia_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Sensores/estadisticas/123456789012345678901234/tendencia?periodo=diario");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task Estadisticas_PacienteConDatos_Retorna200()
     {
         var pacienteId = "123456789012345678901234";

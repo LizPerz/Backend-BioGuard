@@ -176,4 +176,62 @@ public class AlertasIntegrationTests : IClassFixture<CustomWebApplicationFactory
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
+
+    [Fact]
+    public async Task GetById_AlertaExiste_Retorna200()
+    {
+        var alerta = new Alerta
+        {
+            Id = "a1", PacienteId = "123456789012345678901234",
+            Tipo = "glucosa", Nivel = "critico", Titulo = "Alerta",
+            Mensaje = "Test", Atendida = false, FechaCreacion = DateTime.UtcNow
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Alerta>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Alerta, bool>>>()))
+            .ReturnsAsync(alerta);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GeneratePacienteToken("123456789012345678901234"));
+
+        var response = await _client.GetAsync("/api/Alertas/a1");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("tipo").GetString().Should().Be("glucosa");
+    }
+
+    [Fact]
+    public async Task GetById_AlertaNoExiste_Retorna404()
+    {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Alerta>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Alerta, bool>>>()))
+            .ReturnsAsync((Alerta?)null);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateDuenoToken());
+
+        var response = await _client.GetAsync("/api/Alertas/nonexistent");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task ObtenerPendientes_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Alertas/pendientes/pac123");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ObtenerById_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/Alertas/a1");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }

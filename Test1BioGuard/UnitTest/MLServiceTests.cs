@@ -114,4 +114,129 @@ public class MLServiceTests
         result.Accuracy.Should().Be(0);
         result.Activo.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task ObtenerPrediccionesAsync_ConPredicciones_RetornaLista()
+    {
+        var predicciones = new List<PrediccionMl>
+        {
+            new() { Id = "p1", PacienteId = "123456789012345678901234", ProbabilidadPico = 0.75, NivelRiesgo = "Pre-Pico", FechaPrediccion = DateTime.UtcNow },
+            new() { Id = "p2", PacienteId = "123456789012345678901234", ProbabilidadPico = 0.4, NivelRiesgo = "Normal", FechaPrediccion = DateTime.UtcNow.AddHours(-1) }
+        };
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                _mockPredicciones.Object,
+                It.IsAny<FilterDefinition<PrediccionMl>>(),
+                It.IsAny<SortDefinition<PrediccionMl>>(),
+                It.IsAny<int?>(),
+                It.IsAny<int?>()))
+            .ReturnsAsync(predicciones);
+
+        var result = await _service.ObtenerPrediccionesAsync("123456789012345678901234");
+
+        result.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ObtenerPrediccionesAsync_SinPredicciones_RetornaListaVacia()
+    {
+        _mockDb.Setup(db => db.FindToListAsync(
+                _mockPredicciones.Object,
+                It.IsAny<FilterDefinition<PrediccionMl>>(),
+                It.IsAny<SortDefinition<PrediccionMl>>(),
+                It.IsAny<int?>(),
+                It.IsAny<int?>()))
+            .ReturnsAsync(new List<PrediccionMl>());
+
+        var result = await _service.ObtenerPrediccionesAsync("nonexistent");
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ObtenerModelosAsync_ConModelos_RetornaLista()
+    {
+        var modelos = new List<ModeloMl>
+        {
+            new() { Id = "m1", Version = "1.0.0", Descripcion = "Modelo v1", Activo = true, FechaEntrenamiento = DateTime.UtcNow },
+            new() { Id = "m2", Version = "2.0.0", Descripcion = "Modelo v2", Activo = false, FechaEntrenamiento = DateTime.UtcNow.AddDays(-1) }
+        };
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                _mockModelos.Object,
+                It.IsAny<FilterDefinition<ModeloMl>>(),
+                It.IsAny<SortDefinition<ModeloMl>>(),
+                It.IsAny<int?>(),
+                It.IsAny<int?>()))
+            .ReturnsAsync(modelos);
+
+        var result = await _service.ObtenerModelosAsync();
+
+        result.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ObtenerModeloActivoAsync_ConModeloActivo_RetornaModelo()
+    {
+        var modelo = new ModeloMl
+        {
+            Id = "m1", Version = "1.0.0", Activo = true, Accuracy = 0.92
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                _mockModelos.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<ModeloMl, bool>>>()))
+            .ReturnsAsync(modelo);
+
+        var result = await _service.ObtenerModeloActivoAsync();
+
+        result.Should().NotBeNull();
+        result!.Activo.Should().BeTrue();
+        result.Accuracy.Should().Be(0.92);
+    }
+
+    [Fact]
+    public async Task ObtenerModeloActivoAsync_SinModeloActivo_RetornaNull()
+    {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                _mockModelos.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<ModeloMl, bool>>>()))
+            .ReturnsAsync((ModeloMl?)null);
+
+        var result = await _service.ObtenerModeloActivoAsync();
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ObtenerMetricasAsync_ModeloExiste_RetornaModelo()
+    {
+        var modelo = new ModeloMl
+        {
+            Id = "m1", Version = "1.0.0", Accuracy = 0.92, Activo = true
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                _mockModelos.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<ModeloMl, bool>>>()))
+            .ReturnsAsync(modelo);
+
+        var result = await _service.ObtenerMetricasAsync("m1");
+
+        result.Should().NotBeNull();
+        result!.Accuracy.Should().Be(0.92);
+    }
+
+    [Fact]
+    public async Task ObtenerMetricasAsync_ModeloNoExiste_RetornaNull()
+    {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                _mockModelos.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<ModeloMl, bool>>>()))
+            .ReturnsAsync((ModeloMl?)null);
+
+        var result = await _service.ObtenerMetricasAsync("nonexistent");
+
+        result.Should().BeNull();
+    }
 }

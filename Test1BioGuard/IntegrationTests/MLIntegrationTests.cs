@@ -346,4 +346,33 @@ public class MLIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         var doc = JsonDocument.Parse(json);
         doc.RootElement.GetProperty("message").GetString().Should().Be("Sin datos suficientes para diagnóstico");
     }
+
+    [Fact]
+    public async Task Diagnosticar_SinToken_Retorna401()
+    {
+        var request = new DiagnosticarRequest("123456789012345678901234");
+        var response = await _client.PostAsJsonAsync("/api/ML/diagnosticar", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ObtenerRecomendaciones_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/ML/recomendaciones/123456789012345678901234");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ObtenerModelos_SinToken_Retorna401()
+    {
+        var response = await _client.GetAsync("/api/ML/modelos");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Entrenar_SinToken_Retorna401()
+    {
+        var response = await _client.PostAsJsonAsync("/api/ML/entrenar", new { });
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }
