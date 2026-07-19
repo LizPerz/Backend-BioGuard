@@ -76,7 +76,7 @@ public class PacienteService
     private static string GenerarCodigo()
     {
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        return new string(Enumerable.Repeat(chars, 12)
+        return new string(Enumerable.Repeat(chars, 8) /*Aqui cambiar a 8*/
             .Select(s => s[System.Security.Cryptography.RandomNumberGenerator.GetInt32(s.Length)]).ToArray());
     }
 }

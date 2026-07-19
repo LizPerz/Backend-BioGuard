@@ -9,7 +9,7 @@ on:
 env:
   DOTNET_VERSION: '9.0.x'
   PROJECT_PATH: 'BioGuard.Api/BioGuard.Api.csproj'
-  TEST_PATH: 'BioGuard.Api/Test1BioGuard/Test1BioGuard.csproj'
+  TEST_PATH: 'Test1BioGuard/Test1BioGuard.csproj'
 
 jobs:
   build-and-test:
