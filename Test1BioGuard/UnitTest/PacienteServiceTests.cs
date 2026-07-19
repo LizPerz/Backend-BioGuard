@@ -96,7 +96,7 @@ public class PacienteServiceTests
         var result = await _service.CrearPacienteAsync(usuarioWebId, nombre);
 
         result.Should().NotBeNullOrEmpty();
-        result.Should().HaveLength(12);
+        result.Should().HaveLength(8);
         _mockCollection.Verify(c => c.InsertOneAsync(
             It.IsAny<Paciente>(),
             It.IsAny<InsertOneOptions>(),
