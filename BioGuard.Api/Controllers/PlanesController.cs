@@ -128,21 +128,21 @@ public class PlanesController : ControllerBase
         {
             new()
             {
-                Nombre = "Gratis", Precio = 0m, PrecioMoneda = "USD",
+                Nombre = "Gratis", Precio = 0m, PrecioMoneda = "MXN",
                 LimitePacientes = 1, LimiteCuidadores = 1, DiasHistorial = 7,
                 GpsContinuo = false, AiConsole = false, Activo = true, Orden = 1,
                 Descripcion = "Plan básico con funciones limitadas"
             },
             new()
             {
-                Nombre = "Familiar", Precio = 9.99m, PrecioMoneda = "USD",
+                Nombre = "Familiar", Precio = 5m, PrecioMoneda = "MXN",
                 LimitePacientes = 1, LimiteCuidadores = 3, DiasHistorial = 30,
                 GpsContinuo = true, AiConsole = false, Activo = true, Orden = 2,
                 Descripcion = "Plan familiar con GPS y hasta 3 cuidadores"
             },
             new()
             {
-                Nombre = "Pro", Precio = 19.99m, PrecioMoneda = "USD",
+                Nombre = "Pro", Precio = 10m, PrecioMoneda = "MXN",
                 LimitePacientes = 1, LimiteCuidadores = 5, DiasHistorial = 90,
                 GpsContinuo = true, AiConsole = true, Activo = true, Orden = 3,
                 Descripcion = "Plan profesional con AI Console y funciones avanzadas"
@@ -156,12 +156,40 @@ public class PlanesController : ControllerBase
 
         return Ok(new { message = "Planes sembrados", total = planes.Count });
     }
+
+    // POST /api/Planes/migrate-prices [WEB] - Admin
+    // One-time endpoint to update existing plans to MXN pricing
+
+    [HttpPost("migrate-prices")]
+    [Authorize(Roles = "dueno")]
+    public async Task<IActionResult> MigratePrices()
+    {
+        var precioMap = new Dictionary<string, (decimal Precio, string Desc)>
+        {
+            ["Gratis"] = (0m, "Plan básico con funciones limitadas"),
+            ["Familiar"] = (5m, "Plan familiar con GPS y hasta 3 cuidadores"),
+            ["Pro"] = (10m, "Plan profesional con AI Console y funciones avanzadas")
+        };
+
+        var updated = 0;
+        foreach (var (nombre, (precio, desc)) in precioMap)
+        {
+            var update = Builders<Plan>.Update
+                .Set(p => p.Precio, precio)
+                .Set(p => p.PrecioMoneda, "MXN")
+                .Set(p => p.Descripcion, desc);
+            var result = await _db.Planes.UpdateOneAsync(p => p.Nombre == nombre, update);
+            updated += (int)result.ModifiedCount;
+        }
+
+        return Ok(new { message = $"Planes actualizados a MXN", updated });
+    }
 }
 
 public record CrearPlanRequest(
     [Required] string Nombre,
     [Required] decimal Precio,
-    string PrecioMoneda = "USD",
+    string PrecioMoneda = "MXN",
     int LimitePacientes = 1,
     int LimiteCuidadores = 0,
     int DiasHistorial = 30,

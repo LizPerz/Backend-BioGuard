@@ -16,7 +16,7 @@ public class Plan
     public decimal Precio { get; set; }
 
     [BsonElement("precio_moneda")]
-    public string PrecioMoneda { get; set; } = "USD";
+    public string PrecioMoneda { get; set; } = "MXN";
 
     [BsonElement("limite_pacientes")]
     public int LimitePacientes { get; set; } = 1;
