@@ -143,7 +143,7 @@ public class PlanesController : ControllerBase
             new()
             {
                 Nombre = "Pro", Precio = 10m, PrecioMoneda = "MXN",
-                LimitePacientes = 1, LimiteCuidadores = 5, DiasHistorial = 90,
+                LimitePacientes = 1, LimiteCuidadores = 6, DiasHistorial = 90,
                 GpsContinuo = true, AiConsole = true, Activo = true, Orden = 3,
                 Descripcion = "Plan profesional con AI Console y funciones avanzadas"
             }
@@ -158,25 +158,26 @@ public class PlanesController : ControllerBase
     }
 
     // POST /api/Planes/migrate-prices [WEB] - Admin
-    // One-time endpoint to update existing plans to MXN pricing
+    // One-time endpoint to update existing plans pricing + limits
 
     [HttpPost("migrate-prices")]
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> MigratePrices()
     {
-        var precioMap = new Dictionary<string, (decimal Precio, string Desc)>
+        var planUpdates = new Dictionary<string, (decimal Precio, int Cuidadores, string Desc)>
         {
-            ["Gratis"] = (0m, "Plan básico con funciones limitadas"),
-            ["Familiar"] = (5m, "Plan familiar con GPS y hasta 3 cuidadores"),
-            ["Pro"] = (10m, "Plan profesional con AI Console y funciones avanzadas")
+            ["Gratis"] = (0m, 1, "Plan básico con funciones limitadas"),
+            ["Familiar"] = (5m, 3, "Plan familiar con GPS y hasta 3 cuidadores"),
+            ["Pro"] = (10m, 6, "Plan profesional con AI Console y funciones avanzadas")
         };
 
         var updated = 0;
-        foreach (var (nombre, (precio, desc)) in precioMap)
+        foreach (var (nombre, (precio, cuidadores, desc)) in planUpdates)
         {
             var update = Builders<Plan>.Update
                 .Set(p => p.Precio, precio)
                 .Set(p => p.PrecioMoneda, "MXN")
+                .Set(p => p.LimiteCuidadores, cuidadores)
                 .Set(p => p.Descripcion, desc);
             var result = await _db.Planes.UpdateOneAsync(p => p.Nombre == nombre, update);
             updated += (int)result.ModifiedCount;
