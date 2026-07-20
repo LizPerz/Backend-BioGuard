@@ -10,7 +10,7 @@ env:
   DOTNET_VERSION: '9.0.x'
   PROJECT_PATH: 'BioGuard.Api/BioGuard.Api.csproj'
   TEST_PATH: 'Test1BioGuard/Test1BioGuard.csproj'
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  IMAGE_NAME: ghcr.io/${{ vars.IMAGE_NAME || 'lizperz/backend-bioguard' }}
 
 jobs:
   build-and-test:
