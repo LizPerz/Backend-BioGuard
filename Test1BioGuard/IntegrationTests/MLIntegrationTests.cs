@@ -192,7 +192,7 @@ public class MLIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         var json = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(json);
         var arr = doc.RootElement.GetProperty("recomendaciones");
-        arr.GetArrayLength().Should().BeGreaterOrEqualTo(1);
+        arr.GetArrayLength().Should().BeGreaterThanOrEqualTo(1);
         arr[0].GetString().Should().Be("Hidratarse constantemente");
     }
 

@@ -48,7 +48,7 @@ public class RefreshTokenTests
         var token = _service.GenerateRefreshToken();
 
         var bytes = Convert.FromBase64String(token);
-        bytes.Length.Should().BeGreaterOrEqualTo(64);
+        bytes.Length.Should().BeGreaterThanOrEqualTo(64);
     }
 
     [Fact]
