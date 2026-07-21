@@ -41,7 +41,7 @@ public class AuthServiceTests
             ["Jwt:ExpirationMinutes"] = "1440"
         }).Build();
 
-        _service = new AuthService(_mockDb.Object, config);
+        _service = new AuthService(_mockDb.Object, config, new HttpClient());
     }
 
     [Fact]

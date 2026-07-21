@@ -110,7 +110,7 @@ builder.Services.AddSignalR();
 // =============================================
 // SERVICES (Dependency Injection)
 // =============================================
-builder.Services.AddScoped<AuthService>();
+builder.Services.AddHttpClient<AuthService>();
 builder.Services.AddScoped<PacienteService>();
 builder.Services.AddScoped<SensorService>();
 builder.Services.AddScoped<UsuariosWebService>();
