@@ -5,8 +5,8 @@ services:
   - name: bioguard-api
     image:
       registry_type: GHCR
-      registry: LizPerz
-      repository: Backend-BioGuard
+      registry: ghcr.io
+      repository: lizperz/backend-bioguard
       digest: ${IMAGE_DIGEST}
 
     http_port: 8080
