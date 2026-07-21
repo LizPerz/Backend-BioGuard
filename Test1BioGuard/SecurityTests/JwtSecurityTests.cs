@@ -24,7 +24,7 @@ public class JwtSecurityTests
         }).Build();
 
         var mockDb = new Moq.Mock<BioGuard.Api.Config.IMongoDbContext>();
-        _service = new AuthService(mockDb.Object, config);
+        _service = new AuthService(mockDb.Object, config, new HttpClient());
     }
 
     [Fact]

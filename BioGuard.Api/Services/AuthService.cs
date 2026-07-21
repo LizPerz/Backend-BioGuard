@@ -18,10 +18,13 @@ public class AuthService
     private readonly string _audience;
     private readonly int _expirationMinutes;
     private readonly int _refreshTokenDays;
+    private readonly string? _googleClientId;
+    private readonly HttpClient _httpClient;
 
-    public AuthService(IMongoDbContext db, IConfiguration config)
+    public AuthService(IMongoDbContext db, IConfiguration config, HttpClient httpClient)
     {
         _db = db;
+        _httpClient = httpClient;
         _jwtKey = config["Jwt:Key"] is { Length: > 0 } k ? k
             : Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
             ?? throw new InvalidOperationException("JWT secret key not configured.");
@@ -29,6 +32,8 @@ public class AuthService
         _audience = config["Jwt:Audience"] ?? "BioGuardApp";
         _expirationMinutes = int.Parse(config["Jwt:ExpirationMinutes"] ?? "60");
         _refreshTokenDays = int.Parse(config["Jwt:RefreshTokenDays"] ?? "7");
+        _googleClientId = config["Google:ClientId"]
+            ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
     }
 
     // ── Register ───────────────────────────────────────────
@@ -330,10 +335,39 @@ public class AuthService
         return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_");
     }
 
-    private static async Task<string?> ValidarTokenGoogleAsync(string idToken)
+    private async Task<string?> ValidarTokenGoogleAsync(string idToken)
     {
-        await Task.CompletedTask;
-        return null;
+        try
+        {
+            var response = await _httpClient.GetAsync(
+                $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(idToken)}");
+
+            if (!response.IsSuccessStatusCode) return null;
+
+            var json = await response.Content.ReadAsStringAsync();
+            var claims = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+            if (claims == null) return null;
+
+            if (claims.TryGetValue("email", out var emailObj) && emailObj is string email
+                && claims.TryGetValue("email_verified", out var verifiedObj)
+                && verifiedObj is string verified && verified == "true")
+            {
+                if (!string.IsNullOrEmpty(_googleClientId)
+                    && claims.TryGetValue("aud", out var audObj) && audObj is string aud
+                    && aud != _googleClientId)
+                {
+                    return null;
+                }
+
+                return email;
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
 
