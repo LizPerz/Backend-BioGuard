@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using Moq;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Config;
 using BioGuard.Api.Services;
 using BioGuard.Api.Models;
@@ -23,7 +24,8 @@ public class MLServiceTests
         _mockDb.Setup(db => db.PrediccionesMl).Returns(_mockPredicciones.Object);
         _mockDb.Setup(db => db.ModelosMl).Returns(_mockModelos.Object);
 
-        _service = new MLService(_mockDb.Object);
+        var mockLogger = new Mock<ILogger<MLService>>();
+        _service = new MLService(_mockDb.Object, mockLogger.Object);
     }
 
     [Fact]

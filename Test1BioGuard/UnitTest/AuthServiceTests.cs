@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Moq;
 using BioGuard.Api.Config;
 using BioGuard.Api.Services;
@@ -41,7 +42,8 @@ public class AuthServiceTests
             ["Jwt:ExpirationMinutes"] = "1440"
         }).Build();
 
-        _service = new AuthService(_mockDb.Object, config, new HttpClient());
+        var mockLogger = new Mock<ILogger<AuthService>>();
+        _service = new AuthService(_mockDb.Object, config, new HttpClient(), mockLogger.Object);
     }
 
     [Fact]

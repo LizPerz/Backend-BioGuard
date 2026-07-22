@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using BioGuard.Api.Config;
@@ -20,11 +21,13 @@ public class AuthService
     private readonly int _refreshTokenDays;
     private readonly string? _googleClientId;
     private readonly HttpClient _httpClient;
+    private readonly ILogger<AuthService> _logger;
 
-    public AuthService(IMongoDbContext db, IConfiguration config, HttpClient httpClient)
+    public AuthService(IMongoDbContext db, IConfiguration config, HttpClient httpClient, ILogger<AuthService> logger)
     {
         _db = db;
         _httpClient = httpClient;
+        _logger = logger;
         _jwtKey = config["Jwt:Key"] is { Length: > 0 } k ? k
             : Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
             ?? throw new InvalidOperationException("JWT secret key not configured.");
@@ -41,10 +44,25 @@ public class AuthService
     public async Task<AuthResponse?> RegisterWebAsync(RegisterWebRequest request)
     {
         var exists = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
-        if (exists != null) return null;
+        if (exists != null)
+        {
+            _logger.LogWarning("Registration attempt with existing email: {Email}", request.Correo);
+            return null;
+        }
 
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Nombre == request.PlanNombre);
-        if (plan == null) return null;
+        if (plan == null)
+        {
+            _logger.LogWarning("Registration attempt with invalid plan: {PlanNombre}", request.PlanNombre);
+            return null;
+        }
+
+        var (passwordValid, passwordError) = PasswordHasher.ValidateComplexity(request.Password);
+        if (!passwordValid)
+        {
+            _logger.LogWarning("Registration with weak password for email: {Correo}", request.Correo);
+            return null;
+        }
 
         var user = new UsuarioWeb
         {
@@ -61,6 +79,7 @@ public class AuthService
 
         await _db.UsuariosWeb.InsertOneAsync(user);
         var token = GenerateToken(user.Id, user.Correo, "dueno");
+        _logger.LogInformation("User registered successfully: {UserId}", user.Id);
 
         return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan.Nombre);
     }
@@ -70,12 +89,45 @@ public class AuthService
     public async Task<AuthResponse?> LoginWebAsync(LoginWebRequest request)
     {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
-        if (user == null || !user.Activo) return null;
+        if (user == null || !user.Activo)
+        {
+            _logger.LogWarning("Login attempt for inactive or non-existent user: {Email}", request.Correo);
+            return null;
+        }
 
-        if (!PasswordHasher.Verify(request.Password, user.PasswordHash)) return null;
+        if (user.LockedUntil != null && user.LockedUntil > DateTime.UtcNow)
+        {
+            _logger.LogWarning("Login blocked - account locked until {LockedUntil}", user.LockedUntil);
+            return null;
+        }
+
+        if (!PasswordHasher.Verify(request.Password, user.PasswordHash))
+        {
+            var attempts = user.FailedLoginAttempts + 1;
+            var update = Builders<UsuarioWeb>.Update.Set(u => u.FailedLoginAttempts, attempts);
+            if (attempts >= 5)
+            {
+                update = Builders<UsuarioWeb>.Update
+                    .Set(u => u.FailedLoginAttempts, attempts)
+                    .Set(u => u.LockedUntil, DateTime.UtcNow.AddMinutes(15));
+                _logger.LogWarning("Account locked for user {Correo} after {Attempts} failed attempts", request.Correo, attempts);
+            }
+            await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
+            _logger.LogWarning("Invalid password for user: {UserId}", user.Id);
+            return null;
+        }
+
+        if (user.FailedLoginAttempts > 0 || user.LockedUntil != null)
+        {
+            await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id,
+                Builders<UsuarioWeb>.Update
+                    .Set(u => u.FailedLoginAttempts, 0)
+                    .Set(u => u.LockedUntil, null));
+        }
 
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
         var token = GenerateToken(user.Id, user.Correo, "dueno");
+        _logger.LogInformation("User logged in successfully: {UserId}", user.Id);
 
         return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan?.Nombre ?? "Sin plan");
     }
@@ -84,8 +136,12 @@ public class AuthService
 
     public async Task<AuthResponse?> LoginGoogleAsync(LoginGoogleRequest request)
     {
-        string? email = await ValidarTokenGoogleAsync(request.IdToken);
-        if (email == null) return null;
+        var (email, sub) = await ValidarTokenGoogleAsync(request.IdToken);
+        if (email == null || sub == null)
+        {
+            _logger.LogWarning("Google login attempt with invalid token");
+            return null;
+        }
 
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == email);
 
@@ -102,17 +158,18 @@ public class AuthService
                 Correo = email,
                 PasswordHash = "",
                 ProveedorAuth = "google",
-                GoogleId = request.IdToken,
+                GoogleId = sub,
                 PlanId = plan.Id,
                 Activo = true,
                 FechaRegistro = DateTime.UtcNow
             };
 
-            await _db.UsuariosWeb.InsertOneAsync(user);
+        await _db.UsuariosWeb.InsertOneAsync(user);
         }
 
         var userPlan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
         var token = GenerateToken(user.Id, user.Correo, "dueno");
+        _logger.LogInformation("Google login successful for user: {UserId}", user.Id);
 
         return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", userPlan?.Nombre ?? "Sin plan");
     }
@@ -125,6 +182,7 @@ public class AuthService
         if (paciente != null)
         {
             var token = GenerateToken(paciente.Id, paciente.CodigoAccesoQr, "paciente");
+            _logger.LogInformation("Patient login by code: {PacienteId}", paciente.Id);
             return new AuthResponse(token, paciente.Id, paciente.Nombre, "paciente", "paciente");
         }
 
@@ -132,9 +190,11 @@ public class AuthService
         if (cuidador != null)
         {
             var token = GenerateToken(cuidador.Id, cuidador.CodigoAccesoQr, "cuidador");
+            _logger.LogInformation("Caregiver login by code: {CuidadorId}", cuidador.Id);
             return new AuthResponse(token, cuidador.Id, cuidador.Nombre, "cuidador", "cuidador");
         }
 
+        _logger.LogWarning("Login by code failed: code not found");
         return null;
     }
 
@@ -143,10 +203,18 @@ public class AuthService
     public async Task<RefreshTokenResponse?> RefreshTokenAsync(RefreshTokenRequest request, string? ip = null)
     {
         var stored = await _db.FindFirstOrDefaultAsync(_db.RefreshTokens, t => t.Token == request.RefreshToken);
-        if (stored == null || !stored.IsActive) return null;
+        if (stored == null || !stored.IsActive)
+        {
+            _logger.LogWarning("Refresh token attempt with invalid or inactive token");
+            return null;
+        }
 
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Id == stored.UsuarioId);
-        if (user == null) return null;
+        if (user == null)
+        {
+            _logger.LogWarning("Refresh token user not found: {UsuarioId}", stored.UsuarioId);
+            return null;
+        }
 
         var newRefreshToken = GenerateRefreshToken();
         var oldRefreshCopy = new RefreshToken
@@ -171,6 +239,7 @@ public class AuthService
         });
 
         var accessToken = GenerateToken(user.Id, user.Correo, "dueno");
+        _logger.LogInformation("Token refreshed for user: {UserId}", user.Id);
 
         return new RefreshTokenResponse(accessToken, newRefreshToken);
     }
@@ -191,7 +260,11 @@ public class AuthService
     public async Task<bool> Enviar2FAAsync(Enviar2FARequest request)
     {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
-        if (user == null || !user.Activo) return false;
+        if (user == null || !user.Activo)
+        {
+            _logger.LogWarning("2FA send attempt for inactive or non-existent user: {Email}", request.Correo);
+            return false;
+        }
 
         var codigo = RandomNumberString(6);
         var expira = DateTime.UtcNow.AddMinutes(10);
@@ -202,6 +275,7 @@ public class AuthService
             .Set(u => u.TwoFactorVerificado, false);
 
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
+        _logger.LogInformation("2FA code sent to user: {UserId}", user.Id);
 
         return true;
     }
@@ -209,15 +283,27 @@ public class AuthService
     public async Task<AuthResponse?> Verificar2FAAsync(Verificar2FARequest request)
     {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
-        if (user == null || !user.Activo) return null;
+        if (user == null || !user.Activo)
+        {
+            _logger.LogWarning("2FA verification attempt for inactive or non-existent user: {Email}", request.Correo);
+            return null;
+        }
 
         if (string.IsNullOrEmpty(user.TwoFactorCode)) return null;
-        if (user.TwoFactorExpira == null || user.TwoFactorExpira < DateTime.UtcNow) return null;
+        if (user.TwoFactorExpira == null || user.TwoFactorExpira < DateTime.UtcNow)
+        {
+            _logger.LogWarning("2FA verification attempt with expired code for user: {UserId}", user.Id);
+            return null;
+        }
 
         var codeMatch = CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(user.TwoFactorCode),
             Encoding.UTF8.GetBytes(request.Codigo));
-        if (!codeMatch) return null;
+        if (!codeMatch)
+        {
+            _logger.LogWarning("2FA verification failed with invalid code for user: {UserId}", user.Id);
+            return null;
+        }
 
         var update = Builders<UsuarioWeb>.Update
             .Set(u => u.TwoFactorCode, null)
@@ -228,6 +314,7 @@ public class AuthService
 
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
         var token = GenerateToken(user.Id, user.Correo, "dueno");
+        _logger.LogInformation("2FA verified successfully for user: {UserId}", user.Id);
 
         return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan?.Nombre ?? "Sin plan");
     }
@@ -237,7 +324,11 @@ public class AuthService
     public async Task<bool> ForgotPasswordAsync(ForgotPasswordRequest request)
     {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
-        if (user == null || !user.Activo) return false;
+        if (user == null || !user.Activo)
+        {
+            _logger.LogWarning("Password reset attempt for inactive or non-existent user: {Email}", request.Correo);
+            return false;
+        }
 
         var token = GenerateRandomToken();
         var expira = DateTime.UtcNow.AddHours(1);
@@ -247,6 +338,7 @@ public class AuthService
             .Set(u => u.ResetPasswordExpira, expira);
 
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
+        _logger.LogInformation("Password reset token generated for user: {UserId}", user.Id);
 
         return true;
     }
@@ -255,8 +347,23 @@ public class AuthService
     {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.ResetPasswordToken == request.Token);
 
-        if (user == null) return false;
-        if (user.ResetPasswordExpira == null || user.ResetPasswordExpira < DateTime.UtcNow) return false;
+        if (user == null)
+        {
+            _logger.LogWarning("Password reset attempt with invalid token");
+            return false;
+        }
+        if (user.ResetPasswordExpira == null || user.ResetPasswordExpira < DateTime.UtcNow)
+        {
+            _logger.LogWarning("Password reset attempt with expired token for user: {UserId}", user.Id);
+            return false;
+        }
+
+        var (passwordValid, _) = PasswordHasher.ValidateComplexity(request.NuevaPassword);
+        if (!passwordValid)
+        {
+            _logger.LogWarning("Password reset with weak password for user: {UserId}", user.Id);
+            return false;
+        }
 
         var update = Builders<UsuarioWeb>.Update
             .Set(u => u.PasswordHash, PasswordHasher.Hash(request.NuevaPassword))
@@ -264,6 +371,7 @@ public class AuthService
             .Set(u => u.ResetPasswordExpira, null);
 
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
+        _logger.LogInformation("Password reset successfully for user: {UserId}", user.Id);
 
         return true;
     }
@@ -273,16 +381,50 @@ public class AuthService
     public async Task<bool> CambiarPasswordAsync(string userId, CambiarPasswordRequest request)
     {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Id == userId);
-        if (user == null) return false;
+        if (user == null)
+        {
+            _logger.LogWarning("Password change attempt for non-existent user: {UserId}", userId);
+            return false;
+        }
 
-        if (!PasswordHasher.Verify(request.PasswordActual, user.PasswordHash)) return false;
+        if (!PasswordHasher.Verify(request.PasswordActual, user.PasswordHash))
+        {
+            _logger.LogWarning("Password change failed: invalid current password for user: {UserId}", userId);
+            return false;
+        }
+
+        var (passwordValid, _) = PasswordHasher.ValidateComplexity(request.NuevaPassword);
+        if (!passwordValid)
+        {
+            _logger.LogWarning("Password change with weak password for user: {UserId}", userId);
+            return false;
+        }
 
         var update = Builders<UsuarioWeb>.Update
             .Set(u => u.PasswordHash, PasswordHasher.Hash(request.NuevaPassword));
 
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == userId, update);
+        _logger.LogInformation("Password changed successfully for user: {UserId}", userId);
 
         return true;
+    }
+
+    // ── Token Revocation ──────────────────────────────────
+
+    public async Task RevokeTokenAsync(string jti, DateTime expiresAt)
+    {
+        await _db.TokenBlacklist.InsertOneAsync(new TokenBlacklist
+        {
+            Jti = jti,
+            ExpiresAt = expiresAt
+        });
+        _logger.LogInformation("Token revoked: {Jti}", jti);
+    }
+
+    public async Task<bool> IsTokenRevokedAsync(string jti)
+    {
+        var blacklisted = await _db.FindFirstOrDefaultAsync(_db.TokenBlacklist, t => t.Jti == jti);
+        return blacklisted != null;
     }
 
     // ── Helpers ────────────────────────────────────────────
@@ -335,38 +477,48 @@ public class AuthService
         return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_");
     }
 
-    private async Task<string?> ValidarTokenGoogleAsync(string idToken)
+    private async Task<(string? email, string? sub)> ValidarTokenGoogleAsync(string idToken)
     {
         try
         {
             var response = await _httpClient.GetAsync(
                 $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(idToken)}");
 
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode) return (null, null);
 
             var json = await response.Content.ReadAsStringAsync();
             var claims = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(json);
-            if (claims == null) return null;
+            if (claims == null) return (null, null);
 
-            if (claims.TryGetValue("email", out var emailObj) && emailObj is string email
-                && claims.TryGetValue("email_verified", out var verifiedObj)
-                && verifiedObj is string verified && verified == "true")
+            if (!claims.TryGetValue("iss", out var issObj) || issObj is not string iss
+                || iss is not ("accounts.google.com" or "https://accounts.google.com"))
             {
-                if (!string.IsNullOrEmpty(_googleClientId)
-                    && claims.TryGetValue("aud", out var audObj) && audObj is string aud
-                    && aud != _googleClientId)
-                {
-                    return null;
-                }
-
-                return email;
+                return (null, null);
             }
 
-            return null;
+            if (!claims.TryGetValue("email", out var emailObj) || emailObj is not string email
+                || !claims.TryGetValue("email_verified", out var verifiedObj)
+                || verifiedObj is not string verified || verified != "true")
+            {
+                return (null, null);
+            }
+
+            if (!string.IsNullOrEmpty(_googleClientId)
+                && claims.TryGetValue("aud", out var audObj) && audObj is string aud
+                && aud != _googleClientId)
+            {
+                return (null, null);
+            }
+
+            claims.TryGetValue("sub", out var subObj);
+            var sub = subObj as string;
+
+            return (email, sub);
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            _logger.LogError(ex, "Error validating Google token");
+            return (null, null);
         }
     }
 }
@@ -398,5 +550,20 @@ public static class PasswordHasher
         var computed = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, Algorithm, key.Length);
 
         return CryptographicOperations.FixedTimeEquals(computed, key);
+    }
+
+    public static (bool valid, string error) ValidateComplexity(string password)
+    {
+        if (string.IsNullOrEmpty(password) || password.Length < 8)
+            return (false, "La contraseña debe tener al menos 8 caracteres");
+        if (!password.Any(char.IsUpper))
+            return (false, "La contraseña debe contener al menos una mayúscula");
+        if (!password.Any(char.IsLower))
+            return (false, "La contraseña debe contener al menos una minúscula");
+        if (!password.Any(char.IsDigit))
+            return (false, "La contraseña debe contener al menos un número");
+        if (!password.Any(c => "!@#$%^&*()_+-=[]{}|;':\",./<>?".Contains(c)))
+            return (false, "La contraseña debe contener al menos un carácter especial");
+        return (true, string.Empty);
     }
 }

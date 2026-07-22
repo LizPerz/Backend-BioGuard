@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 
 namespace BioGuard.Api.Controllers;
@@ -14,10 +15,12 @@ namespace BioGuard.Api.Controllers;
 public class AuditoriaController : ControllerBase
 {
     private readonly AuditoriaService _auditoriaService;
+    private readonly ILogger<AuditoriaController> _logger;
 
-    public AuditoriaController(AuditoriaService auditoriaService)
+    public AuditoriaController(AuditoriaService auditoriaService, ILogger<AuditoriaController> logger)
     {
         _auditoriaService = auditoriaService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -29,6 +32,7 @@ public class AuditoriaController : ControllerBase
         [FromQuery] int pagina = 1,
         [FromQuery] int porPagina = 50)
     {
+        _logger.LogInformation("Listing audit logs, page {Pagina}, size {PorPagina}", pagina, porPagina);
         var registros = await _auditoriaService.ObtenerAsync(pagina, porPagina);
         var response = registros.Select(a => new
         {

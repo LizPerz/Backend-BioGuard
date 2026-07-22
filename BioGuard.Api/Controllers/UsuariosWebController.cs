@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 
@@ -15,10 +16,12 @@ namespace BioGuard.Api.Controllers;
 public class UsuariosWebController : ControllerBase
 {
     private readonly UsuariosWebService _usuariosWebService;
+    private readonly ILogger<UsuariosWebController> _logger;
 
-    public UsuariosWebController(UsuariosWebService usuariosWebService)
+    public UsuariosWebController(UsuariosWebService usuariosWebService, ILogger<UsuariosWebController> logger)
     {
         _usuariosWebService = usuariosWebService;
+        _logger = logger;
     }
 
     // ── Perfil ────────────────────────────────────────────────
@@ -33,8 +36,13 @@ public class UsuariosWebController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        _logger.LogInformation("Getting profile for user {UsuarioId}", usuarioId);
         var usuario = await _usuariosWebService.GetByIdAsync(usuarioId);
-        if (usuario == null) return NotFound();
+        if (usuario == null)
+        {
+            _logger.LogWarning("User {UsuarioId} not found", usuarioId);
+            return NotFound();
+        }
 
         return Ok(new
         {
@@ -58,8 +66,13 @@ public class UsuariosWebController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        _logger.LogInformation("Updating profile for user {UsuarioId}", usuarioId);
         var result = await _usuariosWebService.UpdatePerfilAsync(usuarioId, request);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Profile update failed for user {UsuarioId}", usuarioId);
+            return NotFound();
+        }
         return Ok(new { message = "Perfil actualizado" });
     }
 
@@ -73,8 +86,13 @@ public class UsuariosWebController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        _logger.LogInformation("Changing email for user {UsuarioId}", usuarioId);
         var result = await _usuariosWebService.CambiarCorreoAsync(usuarioId, request.NuevoCorreo);
-        if (!result) return BadRequest(new { message = "Correo ya registrado o inválido" });
+        if (!result)
+        {
+            _logger.LogWarning("Email change failed for user {UsuarioId}, email already registered or invalid", usuarioId);
+            return BadRequest(new { message = "Correo ya registrado o inválido" });
+        }
         return Ok(new { message = "Correo actualizado" });
     }
 
@@ -88,8 +106,13 @@ public class UsuariosWebController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        _logger.LogInformation("Uploading photo for user {UsuarioId}", usuarioId);
         var result = await _usuariosWebService.SubirFotoAsync(usuarioId, request.FotoBase64);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Photo upload failed for user {UsuarioId}", usuarioId);
+            return NotFound();
+        }
         return Ok(new { message = "Foto actualizada" });
     }
 
@@ -105,8 +128,13 @@ public class UsuariosWebController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        _logger.LogInformation("Getting plan for user {UsuarioId}", usuarioId);
         var plan = await _usuariosWebService.GetPlanAsync(usuarioId);
-        if (plan == null) return NotFound();
+        if (plan == null)
+        {
+            _logger.LogWarning("No plan found for user {UsuarioId}", usuarioId);
+            return NotFound();
+        }
 
         return Ok(new PlanResponse(
             plan.Id, plan.Nombre, plan.Precio, plan.PrecioMoneda,
@@ -124,8 +152,13 @@ public class UsuariosWebController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        _logger.LogInformation("Changing plan to {PlanNombre} for user {UsuarioId}", request.PlanNombre, usuarioId);
         var result = await _usuariosWebService.CambiarPlanAsync(usuarioId, request.PlanNombre);
-        if (!result) return BadRequest(new { message = "Plan no válido" });
+        if (!result)
+        {
+            _logger.LogWarning("Plan change failed for user {UsuarioId}, invalid plan {PlanNombre}", usuarioId, request.PlanNombre);
+            return BadRequest(new { message = "Plan no válido" });
+        }
         return Ok(new { message = "Plan actualizado" });
     }
 
@@ -138,8 +171,13 @@ public class UsuariosWebController : ControllerBase
     [HttpGet("by-email/{correo}")]
     public async Task<IActionResult> GetByEmail(string correo)
     {
+        _logger.LogInformation("Looking up user by email {Correo}", correo);
         var usuario = await _usuariosWebService.GetByEmailAsync(correo);
-        if (usuario == null) return NotFound();
+        if (usuario == null)
+        {
+            _logger.LogWarning("User with email {Correo} not found", correo);
+            return NotFound();
+        }
 
         return Ok(new
         {
@@ -161,8 +199,13 @@ public class UsuariosWebController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        _logger.LogInformation("Deleting account for user {UsuarioId}", usuarioId);
         var result = await _usuariosWebService.EliminarCuentaAsync(usuarioId);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Account deletion failed for user {UsuarioId}", usuarioId);
+            return NotFound();
+        }
         return NoContent();
     }
 }

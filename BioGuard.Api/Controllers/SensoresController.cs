@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 
@@ -17,11 +18,13 @@ public class SensoresController : ControllerBase
 {
     private readonly SensorService _sensorService;
     private readonly PacienteService _pacienteService;
+    private readonly ILogger<SensoresController> _logger;
 
-    public SensoresController(SensorService sensorService, PacienteService pacienteService)
+    public SensoresController(SensorService sensorService, PacienteService pacienteService, ILogger<SensoresController> logger)
     {
         _sensorService = sensorService;
         _pacienteService = pacienteService;
+        _logger = logger;
     }
 
     // ── Lecturas (Envío de datos) ─────────────────────────────
@@ -36,6 +39,7 @@ public class SensoresController : ControllerBase
         var pacienteId = User.FindFirst("paciente_id")?.Value;
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
+        _logger.LogInformation("Receiving sensor reading for paciente: {PacienteId}", pacienteId);
         var lectura = await _sensorService.InsertarLecturaAsync(
             pacienteId, "wearos-001", request.PulsoBpm, request.TemperaturaC,
             request.SudoracionGsr, 0.0);
@@ -53,6 +57,7 @@ public class SensoresController : ControllerBase
         var pacienteId = User.FindFirst("paciente_id")?.Value;
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
+        _logger.LogInformation("Receiving batch of {Count} sensor readings for paciente: {PacienteId}", request.Count, pacienteId);
         var count = 0;
         foreach (var lectura in request)
         {
@@ -79,8 +84,12 @@ public class SensoresController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching readings - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching {Limite} readings for paciente: {PacienteId}", limite, pacienteId);
         var lecturas = await _sensorService.ObtenerLecturasAsync(pacienteId, limite);
         var response = lecturas.Select(l => new
         {
@@ -107,8 +116,12 @@ public class SensoresController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching readings range - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching readings range for paciente: {PacienteId} from {Desde} to {Hasta}", pacienteId, desde, hasta);
         var lecturas = await _sensorService.ObtenerLecturasRangoAsync(pacienteId, desde, hasta);
         var response = lecturas.Select(l => new
         {
@@ -136,10 +149,18 @@ public class SensoresController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching stats - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching statistics for paciente: {PacienteId}", pacienteId);
         var lecturas = await _sensorService.ObtenerLecturasAsync(pacienteId, 100);
-        if (!lecturas.Any()) return Ok(new { message = "Sin datos" });
+        if (!lecturas.Any())
+        {
+            _logger.LogWarning("No sensor data found for paciente: {PacienteId}", pacienteId);
+            return Ok(new { message = "Sin datos" });
+        }
 
         var ultima = lecturas.First();
         return Ok(new
@@ -166,8 +187,12 @@ public class SensoresController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching trend - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching trend for paciente: {PacienteId}, period: {Periodo}", pacienteId, periodo);
         var desde = periodo switch
         {
             "semanal" => DateTime.UtcNow.AddDays(-7),
@@ -199,6 +224,7 @@ public class SensoresController : ControllerBase
         var pacienteId = User.FindFirst("paciente_id")?.Value;
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
+        _logger.LogInformation("Creating metabolic event for paciente: {PacienteId}, risk: {NivelRiesgo}", pacienteId, request.NivelRiesgo);
         var evento = await _sensorService.CrearEventoAsync(
             pacienteId, request.Probabilidad, request.NivelRiesgo, request.Descripcion);
 
@@ -217,8 +243,12 @@ public class SensoresController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching events - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching {Limite} events for paciente: {PacienteId}", limite, pacienteId);
         var eventos = await _sensorService.ObtenerEventosAsync(pacienteId, limite);
         var response = eventos.Select(e => new EventoMetabolicoResponse(
             e.Id, e.NivelRiesgo, e.ProbabilidadMl, e.Descripcion,
@@ -238,8 +268,12 @@ public class SensoresController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching event summary - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching event summary for paciente: {PacienteId}", pacienteId);
         var eventos = await _sensorService.ObtenerEventosAsync(pacienteId, 100);
         return Ok(new
         {
@@ -261,8 +295,13 @@ public class SensoresController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        _logger.LogInformation("Marking event as attended: {EventoId}, cuidador: {CuidadorId}", eventoId, request.CuidadorId);
         var result = await _sensorService.AtenderEventoAsync(eventoId, request.CuidadorId);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Event not found for attending: {EventoId}", eventoId);
+            return NotFound();
+        }
         return Ok(new { message = "Evento atendido" });
     }
 
@@ -280,8 +319,12 @@ public class SensoresController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed exporting PDF - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Exporting PDF for paciente: {PacienteId}", pacienteId);
         var lecturas = await _sensorService.ObtenerLecturasAsync(pacienteId, 1000);
         return Ok(new { message = $"PDF generado con {lecturas.Count} registros", DescargaUrl = $"/api/sensores/lecturas/{pacienteId}/exportar-pdf/descarga" });
     }
@@ -298,6 +341,7 @@ public class SensoresController : ControllerBase
         var pacienteId = User.FindFirst("paciente_id")?.Value;
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
+        _logger.LogInformation("Inserting GPS tracking for paciente: {PacienteId}, emergency: {EsEmergencia}", pacienteId, request.EsEmergencia);
         await _sensorService.InsertarTrackingAsync(
             pacienteId, "wearos-001", request.Longitud, request.Latitud, request.EsEmergencia);
 
@@ -314,6 +358,7 @@ public class SensoresController : ControllerBase
         var pacienteId = User.FindFirst("paciente_id")?.Value;
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
+        _logger.LogInformation("Inserting GPS batch of {Count} records for paciente: {PacienteId}", request.Count, pacienteId);
         foreach (var track in request)
         {
             await _sensorService.InsertarTrackingAsync(
@@ -335,10 +380,18 @@ public class SensoresController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching current tracking - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching current GPS location for paciente: {PacienteId}", pacienteId);
         var ubicacion = await _sensorService.ObtenerUltimaUbicacionAsync(pacienteId);
-        if (ubicacion == null) return NotFound(new { message = "Sin ubicación" });
+        if (ubicacion == null)
+        {
+            _logger.LogWarning("No GPS location found for paciente: {PacienteId}", pacienteId);
+            return NotFound(new { message = "Sin ubicación" });
+        }
 
         return Ok(new TrackingResponse(
             ubicacion.Ubicacion.Coordinates[0],
@@ -360,8 +413,12 @@ public class SensoresController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching GPS route - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching GPS route for paciente: {PacienteId} from {Desde} to {Hasta}", pacienteId, desde, hasta);
         var puntos = await _sensorService.ObtenerTrackingRangoAsync(pacienteId, desde, hasta);
         var response = puntos.Select(p => new TrackingResponse(
             p.Ubicacion.Coordinates[0],

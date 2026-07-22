@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using Moq;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Config;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
@@ -33,7 +34,8 @@ public class UsuariosWebServiceTests
         _mockDb.Setup(db => db.Cuidadores).Returns(_mockCuidadores.Object);
         _mockDb.Setup(db => db.Pagos).Returns(_mockPagos.Object);
 
-        _service = new UsuariosWebService(_mockDb.Object);
+        var mockLogger = new Mock<ILogger<UsuariosWebService>>();
+        _service = new UsuariosWebService(_mockDb.Object, mockLogger.Object);
     }
 
     [Fact]

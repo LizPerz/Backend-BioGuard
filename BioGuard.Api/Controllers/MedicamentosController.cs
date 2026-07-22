@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 
@@ -17,11 +18,13 @@ public class MedicamentosController : ControllerBase
 {
     private readonly MedicamentoService _medicamentoService;
     private readonly PacienteService _pacienteService;
+    private readonly ILogger<MedicamentosController> _logger;
 
-    public MedicamentosController(MedicamentoService medicamentoService, PacienteService pacienteService)
+    public MedicamentosController(MedicamentoService medicamentoService, PacienteService pacienteService, ILogger<MedicamentosController> logger)
     {
         _medicamentoService = medicamentoService;
         _pacienteService = pacienteService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -35,8 +38,12 @@ public class MedicamentosController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching medications - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching medications for paciente: {PacienteId}", pacienteId);
         var medicamentos = await _medicamentoService.ObtenerPorPacienteAsync(pacienteId);
         var response = medicamentos.Select(m => new MedicamentoResponse(
             m.Id, m.PacienteId, m.Nombre, m.Dosis, m.Horario,
@@ -50,15 +57,23 @@ public class MedicamentosController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
+        _logger.LogInformation("Fetching medication by ID: {MedicamentoId}", id);
         var medicamento = await _medicamentoService.ObtenerPorIdAsync(id);
-        if (medicamento == null) return NotFound();
+        if (medicamento == null)
+        {
+            _logger.LogWarning("Medication not found: {MedicamentoId}", id);
+            return NotFound();
+        }
 
         var usuarioId = User.FindFirst("sub")?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(medicamento.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching medication - user: {UserId}, paciente: {PacienteId}", usuarioId, medicamento.PacienteId);
             return Forbid();
+        }
 
         return Ok(new MedicamentoResponse(
             medicamento.Id, medicamento.PacienteId, medicamento.Nombre,
@@ -77,13 +92,23 @@ public class MedicamentosController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         var paciente = await _pacienteService.GetByIdAsync(request.PacienteId);
-        if (paciente == null) return NotFound(new { message = "Paciente no encontrado" });
-        if (paciente.UsuarioWebId != usuarioId) return Forbid();
+        if (paciente == null)
+        {
+            _logger.LogWarning("Patient not found for medication creation - paciente: {PacienteId}", request.PacienteId);
+            return NotFound(new { message = "Paciente no encontrado" });
+        }
+        if (paciente.UsuarioWebId != usuarioId)
+        {
+            _logger.LogWarning("Ownership check failed creating medication - user: {UserId}, paciente: {PacienteId}", usuarioId, request.PacienteId);
+            return Forbid();
+        }
 
+        _logger.LogInformation("Creating medication for paciente: {PacienteId}, name: {Nombre}", request.PacienteId, request.Nombre);
         var medicamento = await _medicamentoService.CrearAsync(
             request.PacienteId, request.Nombre, request.Dosis,
             request.Horario, request.Notas);
 
+        _logger.LogInformation("Medication created successfully: {MedicamentoId}", medicamento.Id);
         return Ok(new { MedicamentoId = medicamento.Id, message = "Medicamento creado" });
     }
 
@@ -100,12 +125,17 @@ public class MedicamentosController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(request.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed on ML trigger - user: {UserId}, paciente: {PacienteId}", usuarioId, request.PacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("ML trigger medication for paciente: {PacienteId}, name: {Nombre}", request.PacienteId, request.Nombre);
         var medicamento = await _medicamentoService.CrearAsync(
             request.PacienteId, request.Nombre, request.Dosis,
             request.Horario, request.Notas);
 
+        _logger.LogInformation("ML trigger medication created: {MedicamentoId}", medicamento.Id);
         return Ok(new { MedicamentoId = medicamento.Id, message = "Medicamento registrado por ML" });
     }
 
@@ -116,18 +146,32 @@ public class MedicamentosController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Editar(string id, [FromBody] ActualizarMedicamentoRequest request)
     {
+        _logger.LogInformation("Editing medication: {MedicamentoId}", id);
         var medicamento = await _medicamentoService.ObtenerPorIdAsync(id);
-        if (medicamento == null) return NotFound();
+        if (medicamento == null)
+        {
+            _logger.LogWarning("Medication not found for edit: {MedicamentoId}", id);
+            return NotFound();
+        }
 
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         var paciente = await _pacienteService.GetByIdAsync(medicamento.PacienteId);
-        if (paciente?.UsuarioWebId != usuarioId) return Forbid();
+        if (paciente?.UsuarioWebId != usuarioId)
+        {
+            _logger.LogWarning("Ownership check failed editing medication - user: {UserId}, medicamento: {MedicamentoId}", usuarioId, id);
+            return Forbid();
+        }
 
         var result = await _medicamentoService.ActualizarAsync(
             id, request.Nombre, request.Dosis, request.Horario, request.Notas);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Medication update failed: {MedicamentoId}", id);
+            return NotFound();
+        }
+        _logger.LogInformation("Medication updated successfully: {MedicamentoId}", id);
         return Ok(new { message = "Medicamento actualizado" });
     }
 
@@ -138,8 +182,14 @@ public class MedicamentosController : ControllerBase
     [HttpPut("{id}/toma")]
     public async Task<IActionResult> RegistrarToma(string id)
     {
+        _logger.LogInformation("Registering medication intake: {MedicamentoId}", id);
         var result = await _medicamentoService.RegistrarTomaAsync(id);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Medication not found for intake registration: {MedicamentoId}", id);
+            return NotFound();
+        }
+        _logger.LogInformation("Medication intake registered: {MedicamentoId}", id);
         return Ok(new { message = "Toma registrada" });
     }
 
@@ -150,8 +200,14 @@ public class MedicamentosController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> CambiarActivo(string id, [FromBody] bool activo)
     {
+        _logger.LogInformation("Changing medication active status: {MedicamentoId}, active: {Activo}", id, activo);
         var result = await _medicamentoService.ActivarAsync(id, activo);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Medication not found for status change: {MedicamentoId}", id);
+            return NotFound();
+        }
+        _logger.LogInformation("Medication active status changed: {MedicamentoId}, active: {Activo}", id, activo);
         return Ok(new { message = activo ? "Medicamento activado" : "Medicamento desactivado" });
     }
 
@@ -162,17 +218,31 @@ public class MedicamentosController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Eliminar(string id)
     {
+        _logger.LogInformation("Deleting medication: {MedicamentoId}", id);
         var medicamento = await _medicamentoService.ObtenerPorIdAsync(id);
-        if (medicamento == null) return NotFound();
+        if (medicamento == null)
+        {
+            _logger.LogWarning("Medication not found for deletion: {MedicamentoId}", id);
+            return NotFound();
+        }
 
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         var paciente = await _pacienteService.GetByIdAsync(medicamento.PacienteId);
-        if (paciente?.UsuarioWebId != usuarioId) return Forbid();
+        if (paciente?.UsuarioWebId != usuarioId)
+        {
+            _logger.LogWarning("Ownership check failed deleting medication - user: {UserId}, medicamento: {MedicamentoId}", usuarioId, id);
+            return Forbid();
+        }
 
         var result = await _medicamentoService.EliminarAsync(id);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Medication deletion failed: {MedicamentoId}", id);
+            return NotFound();
+        }
+        _logger.LogInformation("Medication deleted successfully: {MedicamentoId}", id);
         return NoContent();
     }
 

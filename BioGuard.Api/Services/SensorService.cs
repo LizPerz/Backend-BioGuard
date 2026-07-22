@@ -1,14 +1,20 @@
 using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.Models;
+using Microsoft.Extensions.Logging;
 
 namespace BioGuard.Api.Services;
 
 public class SensorService
 {
     private readonly IMongoDbContext _db;
+    private readonly ILogger<SensorService> _logger;
 
-    public SensorService(IMongoDbContext db) => _db = db;
+    public SensorService(IMongoDbContext db, ILogger<SensorService> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
 
     public async Task<LecturaSensor> InsertarLecturaAsync(string pacienteId, string dispositivoMac,
         int pulsoBpm, double temperaturaC, double sudoracionGsr, double probabilidadPico, int diasHistorial = 30)
@@ -30,6 +36,7 @@ public class SensorService
         };
 
         await _db.LecturasSensores.InsertOneAsync(lectura);
+        _logger.LogInformation("Sensor reading inserted for patient: {PacienteId}", pacienteId);
         return lectura;
     }
 
@@ -69,6 +76,7 @@ public class SensorService
         };
 
         await _db.EventosMetabolicos.InsertOneAsync(evento);
+        _logger.LogInformation("Metabolic event created for patient: {PacienteId}", pacienteId);
         return evento;
     }
 
@@ -87,13 +95,25 @@ public class SensorService
             .Set(e => e.FechaAtencion, DateTime.UtcNow);
 
         var result = await _db.EventosMetabolicos.UpdateOneAsync(e => e.Id == eventoId, update);
+        if (result.ModifiedCount == 0)
+        {
+            _logger.LogWarning("Event not found or already attended: {EventoId}", eventoId);
+        }
+        else
+        {
+            _logger.LogInformation("Event attended: {EventoId} by caregiver: {CuidadorId}", eventoId, cuidadorId);
+        }
         return result.ModifiedCount > 0;
     }
 
     public async Task<bool> AgregarAccionAsync(string eventoId, string accion)
     {
         var evento = await _db.FindFirstOrDefaultAsync(_db.EventosMetabolicos, e => e.Id == eventoId);
-        if (evento == null) return false;
+        if (evento == null)
+        {
+            _logger.LogWarning("Add action to non-existent event: {EventoId}", eventoId);
+            return false;
+        }
 
         var nuevasAcciones = string.IsNullOrEmpty(evento.AccionesTomadas)
             ? accion
@@ -116,6 +136,7 @@ public class SensorService
         };
 
         await _db.TrackingGps.InsertOneAsync(tracking);
+        _logger.LogInformation("GPS tracking inserted for patient: {PacienteId}, emergency: {EsEmergencia}", pacienteId, esEmergencia);
     }
 
     public async Task<List<TrackingGps>> ObtenerTrackingAsync(string pacienteId, int limite = 100)

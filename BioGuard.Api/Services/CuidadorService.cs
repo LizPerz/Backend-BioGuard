@@ -1,14 +1,20 @@
 using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.Models;
+using Microsoft.Extensions.Logging;
 
 namespace BioGuard.Api.Services;
 
 public class CuidadorService
 {
     private readonly IMongoDbContext _db;
+    private readonly ILogger<CuidadorService> _logger;
 
-    public CuidadorService(IMongoDbContext db) => _db = db;
+    public CuidadorService(IMongoDbContext db, ILogger<CuidadorService> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
 
     public async Task<List<Cuidador>> ObtenerPorUsuarioAsync(string usuarioId)
     {
@@ -48,6 +54,7 @@ public class CuidadorService
         };
 
         await _db.Cuidadores.InsertOneAsync(cuidador);
+        _logger.LogInformation("Caregiver created: {CuidadorId} for patient: {PacienteId}", cuidador.Id, pacienteId);
         return (cuidador, codigo);
     }
 
@@ -58,12 +65,28 @@ public class CuidadorService
             .Set(c => c.Parentesco, parentesco);
 
         var result = await _db.Cuidadores.UpdateOneAsync(c => c.Id == id, update);
+        if (result.ModifiedCount == 0)
+        {
+            _logger.LogWarning("Caregiver update not found or unchanged: {CuidadorId}", id);
+        }
+        else
+        {
+            _logger.LogInformation("Caregiver updated: {CuidadorId}", id);
+        }
         return result.ModifiedCount > 0;
     }
 
     public async Task<bool> EliminarAsync(string id)
     {
         var result = await _db.Cuidadores.DeleteOneAsync(c => c.Id == id);
+        if (result.DeletedCount == 0)
+        {
+            _logger.LogWarning("Caregiver delete not found: {CuidadorId}", id);
+        }
+        else
+        {
+            _logger.LogInformation("Caregiver deleted: {CuidadorId}", id);
+        }
         return result.DeletedCount > 0;
     }
 
@@ -72,6 +95,7 @@ public class CuidadorService
         var codigo = GenerarCodigo();
         var update = Builders<Cuidador>.Update.Set(c => c.CodigoAccesoQr, codigo);
         await _db.Cuidadores.UpdateOneAsync(c => c.Id == id, update);
+        _logger.LogInformation("QR regenerated for caregiver: {CuidadorId}", id);
         return codigo;
     }
 

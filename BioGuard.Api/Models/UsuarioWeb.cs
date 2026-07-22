@@ -55,6 +55,12 @@ public class UsuarioWeb
     [BsonElement("activo")]
     public bool Activo { get; set; } = true;
 
+    [BsonElement("failed_login_attempts")]
+    public int FailedLoginAttempts { get; set; } = 0;
+
+    [BsonElement("locked_until")]
+    public DateTime? LockedUntil { get; set; }
+
     [BsonElement("fecha_registro")]
     public DateTime FechaRegistro { get; set; } = DateTime.UtcNow;
 }

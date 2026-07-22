@@ -2,14 +2,20 @@ using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Models;
+using Microsoft.Extensions.Logging;
 
 namespace BioGuard.Api.Services;
 
 public class UsuariosWebService
 {
     private readonly IMongoDbContext _db;
+    private readonly ILogger<UsuariosWebService> _logger;
 
-    public UsuariosWebService(IMongoDbContext db) => _db = db;
+    public UsuariosWebService(IMongoDbContext db, ILogger<UsuariosWebService> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
 
     public async Task<UsuarioWeb?> GetByIdAsync(string id)
     {
@@ -31,16 +37,29 @@ public class UsuariosWebService
             .Set(u => u.ApellidoMaterno, request.ApellidoMaterno);
 
         var result = await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == usuarioId, update);
+        if (result.ModifiedCount == 0)
+        {
+            _logger.LogWarning("Profile update not found or unchanged: {UsuarioId}", usuarioId);
+        }
+        else
+        {
+            _logger.LogInformation("Profile updated: {UsuarioId}", usuarioId);
+        }
         return result.ModifiedCount > 0;
     }
 
     public async Task<bool> CambiarCorreoAsync(string usuarioId, string nuevoCorreo)
     {
         var exists = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == nuevoCorreo);
-        if (exists != null) return false;
+        if (exists != null)
+        {
+            _logger.LogWarning("Email change failed: email already in use: {NuevoCorreo}", nuevoCorreo);
+            return false;
+        }
 
         var update = Builders<UsuarioWeb>.Update.Set(u => u.Correo, nuevoCorreo);
         var result = await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == usuarioId, update);
+        _logger.LogInformation("Email changed for user: {UsuarioId}", usuarioId);
         return result.ModifiedCount > 0;
     }
 
@@ -48,16 +67,22 @@ public class UsuariosWebService
     {
         var update = Builders<UsuarioWeb>.Update.Set(u => u.FotoPerfil, fotoBase64);
         var result = await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == usuarioId, update);
+        _logger.LogInformation("Profile photo uploaded for user: {UsuarioId}", usuarioId);
         return result.ModifiedCount > 0;
     }
 
     public async Task<bool> CambiarPlanAsync(string usuarioId, string planNombre)
     {
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Nombre == planNombre);
-        if (plan == null) return false;
+        if (plan == null)
+        {
+            _logger.LogWarning("Plan change failed: plan not found: {PlanNombre}", planNombre);
+            return false;
+        }
 
         var update = Builders<UsuarioWeb>.Update.Set(u => u.PlanId, plan.Id);
         var result = await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == usuarioId, update);
+        _logger.LogInformation("Plan changed to {PlanNombre} for user: {UsuarioId}", planNombre, usuarioId);
         return result.ModifiedCount > 0;
     }
 
@@ -80,6 +105,14 @@ public class UsuariosWebService
         await _db.DeleteManyAsync(_db.Pagos, p => p.UsuarioWebId == usuarioId);
 
         var result = await _db.UsuariosWeb.DeleteOneAsync(u => u.Id == usuarioId);
+        if (result.DeletedCount == 0)
+        {
+            _logger.LogWarning("Account delete not found: {UsuarioId}", usuarioId);
+        }
+        else
+        {
+            _logger.LogInformation("Account deleted: {UsuarioId}", usuarioId);
+        }
         return result.DeletedCount > 0;
     }
 

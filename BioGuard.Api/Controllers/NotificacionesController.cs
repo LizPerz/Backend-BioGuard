@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 
@@ -17,11 +18,13 @@ public class NotificacionesController : ControllerBase
 {
     private readonly NotificacionService _notificacionService;
     private readonly PacienteService _pacienteService;
+    private readonly ILogger<NotificacionesController> _logger;
 
-    public NotificacionesController(NotificacionService notificacionService, PacienteService pacienteService)
+    public NotificacionesController(NotificacionService notificacionService, PacienteService pacienteService, ILogger<NotificacionesController> logger)
     {
         _notificacionService = notificacionService;
         _pacienteService = pacienteService;
+        _logger = logger;
     }
 
     // ── Consulta ──────────────────────────────────────────────
@@ -36,6 +39,7 @@ public class NotificacionesController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        _logger.LogInformation("Listing notifications for user {UsuarioId}", usuarioId);
         var notificaciones = await _notificacionService.ObtenerPorUsuarioAsync(usuarioId);
         var response = notificaciones.Select(n => new NotificacionResponse(
             n.Id, n.Titulo, n.Mensaje, n.Leida, n.FechaEnvio));
@@ -54,8 +58,12 @@ public class NotificacionesController : ControllerBase
         if (string.IsNullOrEmpty(currentUserId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, currentUserId, role!))
+        {
+            _logger.LogWarning("Ownership check failed for patient {PacienteId} requested by user {UsuarioId}", pacienteId, currentUserId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Listing notifications for patient {PacienteId}", pacienteId);
         var notificaciones = await _notificacionService.ObtenerPorPacienteAsync(pacienteId);
         var response = notificaciones.Select(n => new NotificacionResponse(
             n.Id, n.Titulo, n.Mensaje, n.Leida, n.FechaEnvio));
@@ -74,8 +82,12 @@ public class NotificacionesController : ControllerBase
         if (string.IsNullOrEmpty(currentUserId)) return Unauthorized();
 
         if (role == "dueno" && currentUserId != usuarioId)
+        {
+            _logger.LogWarning("User {UsuarioId} attempted to access notifications of user {TargetUsuarioId} without permission", currentUserId, usuarioId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Listing notifications for user {UsuarioId}", usuarioId);
         var notificaciones = await _notificacionService.ObtenerPorUsuarioAsync(usuarioId);
         var response = notificaciones.Select(n => new NotificacionResponse(
             n.Id, n.Titulo, n.Mensaje, n.Leida, n.FechaEnvio));
@@ -91,8 +103,13 @@ public class NotificacionesController : ControllerBase
     [HttpPut("{id}/leer")]
     public async Task<IActionResult> MarcarLeida(string id)
     {
+        _logger.LogInformation("Marking notification {Id} as read", id);
         var result = await _notificacionService.MarcarLeidaAsync(id);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Notification {Id} not found when marking as read", id);
+            return NotFound();
+        }
         return Ok(new { message = "Notificación marcada como leída" });
     }
 
@@ -111,8 +128,12 @@ public class NotificacionesController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (role == "paciente" && usuarioId != request.PacienteId)
+        {
+            _logger.LogWarning("Patient {UsuarioId} attempted to create notification for different patient {PacienteId}", usuarioId, request.PacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Creating notification for patient {PacienteId} by user {UsuarioId}", request.PacienteId, usuarioId);
         var notificacion = await _notificacionService.CrearAsync(
             request.PacienteId, request.Titulo, request.Mensaje, request.Tipo,
             request.CuidadorId, request.UsuarioWebId);
@@ -127,8 +148,13 @@ public class NotificacionesController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Eliminar(string id)
     {
+        _logger.LogInformation("Deleting notification {Id}", id);
         var result = await _notificacionService.EliminarAsync(id);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Notification {Id} not found when attempting to delete", id);
+            return NotFound();
+        }
         return NoContent();
     }
 

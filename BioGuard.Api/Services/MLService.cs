@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.Models;
@@ -7,11 +8,17 @@ namespace BioGuard.Api.Services;
 public class MLService
 {
     private readonly IMongoDbContext _db;
+    private readonly ILogger<MLService> _logger;
 
-    public MLService(IMongoDbContext db) => _db = db;
+    public MLService(IMongoDbContext db, ILogger<MLService> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
 
     public async Task<List<PrediccionMl>> ObtenerPrediccionesAsync(string pacienteId)
     {
+        _logger.LogInformation("Obteniendo predicciones ML para paciente {PacienteId}", pacienteId);
         var filter = Builders<PrediccionMl>.Filter.Eq(p => p.PacienteId, pacienteId);
         var sort = Builders<PrediccionMl>.Sort.Descending(p => p.FechaPrediccion);
         return await _db.FindToListAsync(_db.PrediccionesMl, filter, sort, 20);
@@ -19,6 +26,7 @@ public class MLService
 
     public async Task<PrediccionMl?> ObtenerPrediccionActualAsync(string pacienteId)
     {
+        _logger.LogInformation("Obteniendo predicción actual para paciente {PacienteId}", pacienteId);
         var filter = Builders<PrediccionMl>.Filter.And(
             Builders<PrediccionMl>.Filter.Eq(p => p.PacienteId, pacienteId),
             Builders<PrediccionMl>.Filter.Gt(p => p.FechaExpiracion, DateTime.UtcNow));
@@ -28,8 +36,13 @@ public class MLService
 
     public async Task<List<string>> ObtenerRecomendacionesAsync(string pacienteId)
     {
+        _logger.LogInformation("Obteniendo recomendaciones ML para paciente {PacienteId}", pacienteId);
         var prediccion = await ObtenerPrediccionActualAsync(pacienteId);
-        if (prediccion == null) return new List<string>();
+        if (prediccion == null)
+        {
+            _logger.LogWarning("No hay predicción activa para paciente {PacienteId}", pacienteId);
+            return new List<string>();
+        }
 
         var recomendaciones = new List<string> { prediccion.Recomendacion };
 
@@ -49,6 +62,7 @@ public class MLService
 
     public async Task<List<ModeloMl>> ObtenerModelosAsync()
     {
+        _logger.LogInformation("Obteniendo modelos ML");
         var filter = Builders<ModeloMl>.Filter.Empty;
         var sort = Builders<ModeloMl>.Sort.Descending(m => m.FechaEntrenamiento);
         return await _db.FindToListAsync(_db.ModelosMl, filter, sort);
@@ -56,17 +70,21 @@ public class MLService
 
     public async Task<ModeloMl?> ObtenerModeloActivoAsync()
     {
+        _logger.LogInformation("Buscando modelo ML activo");
         return await _db.FindFirstOrDefaultAsync(_db.ModelosMl, m => m.Activo);
     }
 
     public async Task<ModeloMl> CrearModeloAsync(ModeloMl modelo)
     {
+        _logger.LogInformation("Creando modelo ML v{Version}", modelo.Version);
         await _db.ModelosMl.InsertOneAsync(modelo);
+        _logger.LogInformation("Modelo ML creado con ID {ModeloId}", modelo.Id);
         return modelo;
     }
 
     public async Task<ModeloMl?> ObtenerMetricasAsync(string modeloId)
     {
+        _logger.LogInformation("Obteniendo métricas del modelo {ModeloId}", modeloId);
         return await _db.FindFirstOrDefaultAsync(_db.ModelosMl, m => m.Id == modeloId);
     }
 }

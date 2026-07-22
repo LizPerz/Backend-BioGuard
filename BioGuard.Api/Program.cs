@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using AspNetCoreRateLimit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -63,6 +64,20 @@ builder.Services.AddAuthentication(options =>
                 context.Token = accessToken;
             }
             return Task.CompletedTask;
+        },
+        OnTokenValidated = async context =>
+        {
+            var jti = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                      ?? context.Principal?.FindFirst("jti")?.Value;
+            if (!string.IsNullOrEmpty(jti))
+            {
+                var scope = context.HttpContext.RequestServices.CreateScope();
+                var authService = scope.ServiceProvider.GetRequiredService<AuthService>();
+                if (await authService.IsTokenRevokedAsync(jti))
+                {
+                    context.Fail("Token has been revoked");
+                }
+            }
         }
     };
 });

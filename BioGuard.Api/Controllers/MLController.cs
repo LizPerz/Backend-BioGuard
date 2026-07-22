@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Models;
@@ -16,10 +17,12 @@ namespace BioGuard.Api.Controllers;
 public class MLController : ControllerBase
 {
     private readonly MLService _mlService;
+    private readonly ILogger<MLController> _logger;
 
-    public MLController(MLService mlService)
+    public MLController(MLService mlService, ILogger<MLController> logger)
     {
         _mlService = mlService;
+        _logger = logger;
     }
 
     // ── Predicciones ──────────────────────────────────────────
@@ -31,6 +34,7 @@ public class MLController : ControllerBase
     [HttpGet("predicciones/{pacienteId}")]
     public async Task<IActionResult> ObtenerPredicciones(string pacienteId)
     {
+        _logger.LogInformation("Getting ML predictions for patient {PacienteId}", pacienteId);
         var predicciones = await _mlService.ObtenerPrediccionesAsync(pacienteId);
         var response = predicciones.Select(p => new
         {
@@ -52,8 +56,13 @@ public class MLController : ControllerBase
     [HttpGet("predicciones/{pacienteId}/actual")]
     public async Task<IActionResult> PrediccionActual(string pacienteId)
     {
+        _logger.LogInformation("Getting current ML prediction for patient {PacienteId}", pacienteId);
         var prediccion = await _mlService.ObtenerPrediccionActualAsync(pacienteId);
-        if (prediccion == null) return Ok(new { message = "Sin predicción activa" });
+        if (prediccion == null)
+        {
+            _logger.LogWarning("No active prediction for patient {PacienteId}", pacienteId);
+            return Ok(new { message = "Sin predicción activa" });
+        }
         return Ok(new
         {
             prediccion.Id,
@@ -74,6 +83,7 @@ public class MLController : ControllerBase
     [HttpGet("recomendaciones/{pacienteId}")]
     public async Task<IActionResult> Recomendaciones(string pacienteId)
     {
+        _logger.LogInformation("Getting recommendations for patient {PacienteId}", pacienteId);
         var recomendaciones = await _mlService.ObtenerRecomendacionesAsync(pacienteId);
         return Ok(new { Recomendaciones = recomendaciones });
     }
@@ -87,6 +97,7 @@ public class MLController : ControllerBase
     [HttpGet("modelos")]
     public async Task<IActionResult> ListarModelos()
     {
+        _logger.LogInformation("Listing ML models");
         var modelos = await _mlService.ObtenerModelosAsync();
         var response = modelos.Select(m => new
         {
@@ -111,6 +122,7 @@ public class MLController : ControllerBase
     [HttpPost("entrenar")]
     public async Task<IActionResult> EntrenarModelo([FromBody] EntrenarModeloRequest request)
     {
+        _logger.LogInformation("Starting ML model training, version {Version}", request.Version);
         var modelo = new ModeloMl
         {
             Version = request.Version,
@@ -131,6 +143,7 @@ public class MLController : ControllerBase
     [HttpPost("reentrenar")]
     public async Task<IActionResult> ReentrenarModelo([FromBody] EntrenarModeloRequest request)
     {
+        _logger.LogInformation("Starting ML model retraining, version {Version}", request.Version);
         var modeloActivo = await _mlService.ObtenerModeloActivoAsync();
 
         var modelo = new ModeloMl
@@ -156,11 +169,15 @@ public class MLController : ControllerBase
     [HttpPost("diagnosticar")]
     public async Task<IActionResult> Diagnosticar([FromBody] DiagnosticarRequest request)
     {
+        _logger.LogInformation("Running ML diagnosis for patient {PacienteId}", request.PacienteId);
         var predicciones = await _mlService.ObtenerPrediccionesAsync(request.PacienteId);
         var prediccion = predicciones.FirstOrDefault();
 
         if (prediccion == null)
+        {
+            _logger.LogWarning("Insufficient data for diagnosis on patient {PacienteId}", request.PacienteId);
             return Ok(new { message = "Sin datos suficientes para diagnóstico" });
+        }
 
         return Ok(new
         {
@@ -181,8 +198,13 @@ public class MLController : ControllerBase
     [HttpGet("metricas/{modeloId}")]
     public async Task<IActionResult> MetricasModelo(string modeloId)
     {
+        _logger.LogInformation("Getting metrics for model {ModeloId}", modeloId);
         var modelo = await _mlService.ObtenerMetricasAsync(modeloId);
-        if (modelo == null) return NotFound();
+        if (modelo == null)
+        {
+            _logger.LogWarning("Model {ModeloId} not found when getting metrics", modeloId);
+            return NotFound();
+        }
 
         return Ok(new
         {

@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using Moq;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Config;
 using BioGuard.Api.Services;
 using BioGuard.Api.Models;
@@ -18,7 +19,8 @@ public class AuditoriaServiceTests
         _mockDb = new Mock<IMongoDbContext>();
         _mockAuditoria = new Mock<IMongoCollection<Auditoria>>();
         _mockDb.Setup(db => db.Auditoria).Returns(_mockAuditoria.Object);
-        _service = new AuditoriaService(_mockDb.Object);
+        var mockLogger = new Mock<ILogger<AuditoriaService>>();
+        _service = new AuditoriaService(_mockDb.Object, mockLogger.Object);
     }
 
     [Fact]

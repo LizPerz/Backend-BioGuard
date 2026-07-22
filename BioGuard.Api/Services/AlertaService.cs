@@ -1,14 +1,20 @@
 using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.Models;
+using Microsoft.Extensions.Logging;
 
 namespace BioGuard.Api.Services;
 
 public class AlertaService
 {
     private readonly IMongoDbContext _db;
+    private readonly ILogger<AlertaService> _logger;
 
-    public AlertaService(IMongoDbContext db) => _db = db;
+    public AlertaService(IMongoDbContext db, ILogger<AlertaService> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
 
     public async Task<List<Alerta>> ObtenerPorPacienteAsync(string pacienteId, int limite = 50)
     {
@@ -47,6 +53,7 @@ public class AlertaService
         };
 
         await _db.Alertas.InsertOneAsync(alerta);
+        _logger.LogInformation("Alert created for patient: {PacienteId}, type: {Tipo}, level: {Nivel}", pacienteId, tipo, nivel);
         return alerta;
     }
 
@@ -58,18 +65,35 @@ public class AlertaService
             .Set(a => a.FechaAtencion, DateTime.UtcNow);
 
         var result = await _db.Alertas.UpdateOneAsync(a => a.Id == alertaId, update);
+        if (result.ModifiedCount == 0)
+        {
+            _logger.LogWarning("Alert resolve not found or already resolved: {AlertaId}", alertaId);
+        }
+        else
+        {
+            _logger.LogInformation("Alert resolved: {AlertaId} by caregiver: {CuidadorId}", alertaId, cuidadorId);
+        }
         return result.ModifiedCount > 0;
     }
 
     public async Task<bool> EliminarAsync(string id)
     {
         var result = await _db.Alertas.DeleteOneAsync(a => a.Id == id);
+        if (result.DeletedCount == 0)
+        {
+            _logger.LogWarning("Alert delete not found: {AlertaId}", id);
+        }
+        else
+        {
+            _logger.LogInformation("Alert deleted: {AlertaId}", id);
+        }
         return result.DeletedCount > 0;
     }
 
     public async Task<bool> EliminarPorPacienteAsync(string pacienteId)
     {
         var result = await _db.DeleteManyAsync(_db.Alertas, a => a.PacienteId == pacienteId);
+        _logger.LogInformation("Alerts deleted for patient: {PacienteId}, count: {Count}", pacienteId, result.DeletedCount);
         return result.DeletedCount > 0;
     }
 }

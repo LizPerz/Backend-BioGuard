@@ -2,14 +2,20 @@ using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Models;
+using Microsoft.Extensions.Logging;
 
 namespace BioGuard.Api.Services;
 
 public class PacienteService
 {
     private readonly IMongoDbContext _db;
+    private readonly ILogger<PacienteService> _logger;
 
-    public PacienteService(IMongoDbContext db) => _db = db;
+    public PacienteService(IMongoDbContext db, ILogger<PacienteService> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
 
     public async Task<Paciente?> GetByCodigoAsync(string codigo)
     {
@@ -38,6 +44,7 @@ public class PacienteService
             .Set(p => p.PerfilCompletado, true);
 
         await _db.Pacientes.UpdateOneAsync(p => p.Id == pacienteId, update);
+        _logger.LogInformation("Biometrics updated for patient: {PacienteId}", pacienteId);
     }
 
     public async Task<string> CrearPacienteAsync(string usuarioWebId, string nombre)
@@ -51,6 +58,7 @@ public class PacienteService
             FechaRegistro = DateTime.UtcNow
         };
         await _db.Pacientes.InsertOneAsync(paciente);
+        _logger.LogInformation("Patient created: {PacienteId} for user: {UsuarioWebId}", paciente.Id, usuarioWebId);
         return codigo;
     }
 
@@ -58,6 +66,14 @@ public class PacienteService
     {
         var update = Builders<Paciente>.Update.Set(p => p.Nombre, nombre);
         var result = await _db.Pacientes.UpdateOneAsync(p => p.Id == pacienteId, update);
+        if (result.ModifiedCount == 0)
+        {
+            _logger.LogWarning("Patient name update not found or unchanged: {PacienteId}", pacienteId);
+        }
+        else
+        {
+            _logger.LogInformation("Patient name updated: {PacienteId}", pacienteId);
+        }
         return result.ModifiedCount > 0;
     }
 
@@ -72,6 +88,14 @@ public class PacienteService
         await _db.DeleteManyAsync(_db.Alertas, a => a.PacienteId == pacienteId);
 
         var result = await _db.Pacientes.DeleteOneAsync(p => p.Id == pacienteId);
+        if (result.DeletedCount == 0)
+        {
+            _logger.LogWarning("Patient delete not found: {PacienteId}", pacienteId);
+        }
+        else
+        {
+            _logger.LogInformation("Patient deleted: {PacienteId}", pacienteId);
+        }
         return result.DeletedCount > 0;
     }
 

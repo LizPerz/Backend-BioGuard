@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using Moq;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Config;
 using BioGuard.Api.Services;
 using BioGuard.Api.Models;
@@ -23,7 +24,8 @@ public class PagosServiceTests
         _mockDb.Setup(db => db.Pagos).Returns(_mockPagos.Object);
         _mockDb.Setup(db => db.Planes).Returns(_mockPlanes.Object);
 
-        _service = new PagosService(_mockDb.Object);
+        var mockLogger = new Mock<ILogger<PagosService>>();
+        _service = new PagosService(_mockDb.Object, mockLogger.Object);
     }
 
     [Fact]
