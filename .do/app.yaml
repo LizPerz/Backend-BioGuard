@@ -33,5 +33,5 @@ services:
         value: ${JWT_SECRET_KEY}
         type: SECRET
       - key: GOOGLE_CLIENT_ID
-        value: ${GOOGLE_CLIENT_ID}
+        value: 512801602468-k4rab31tqithbjb4c36ltc4mad2sk4oj.apps.googleusercontent.com
         type: SECRET
