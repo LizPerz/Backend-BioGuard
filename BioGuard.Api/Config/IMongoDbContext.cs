@@ -23,6 +23,7 @@ public interface IMongoDbContext
     IMongoCollection<RefreshToken> RefreshTokens { get; }
     IMongoCollection<Medicamento> Medicamentos { get; }
     IMongoCollection<Alerta> Alertas { get; }
+    IMongoCollection<TokenBlacklist> TokenBlacklist { get; }
 
     Task<T?> FindFirstOrDefaultAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter);
     Task<List<T>> FindToListAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter);

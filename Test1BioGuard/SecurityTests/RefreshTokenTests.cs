@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 
 namespace Test1BioGuard.SecurityTests;
@@ -22,7 +23,8 @@ public class RefreshTokenTests
             }).Build();
 
         var mockDb = new Moq.Mock<BioGuard.Api.Config.IMongoDbContext>();
-        _service = new AuthService(mockDb.Object, config, new HttpClient());
+        var mockLogger = new Moq.Mock<ILogger<AuthService>>();
+        _service = new AuthService(mockDb.Object, config, new HttpClient(), mockLogger.Object);
     }
 
     [Fact]

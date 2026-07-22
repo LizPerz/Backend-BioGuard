@@ -25,3 +25,12 @@ updates:
     labels:
       - "ci"
       - "security"
+
+  - package-ecosystem: "docker"
+    directory: "/BioGuard.Api"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "security"

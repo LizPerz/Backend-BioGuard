@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 
@@ -16,10 +17,12 @@ namespace BioGuard.Api.Controllers;
 public class DispositivosController : ControllerBase
 {
     private readonly DispositivoService _dispositivoService;
+    private readonly ILogger<DispositivosController> _logger;
 
-    public DispositivosController(DispositivoService dispositivoService)
+    public DispositivosController(DispositivoService dispositivoService, ILogger<DispositivosController> logger)
     {
         _dispositivoService = dispositivoService;
+        _logger = logger;
     }
 
     // ── Vinculación ───────────────────────────────────────────
@@ -34,8 +37,13 @@ public class DispositivosController : ControllerBase
         var pacienteId = User.FindFirst("paciente_id")?.Value;
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
+        _logger.LogInformation("Linking device for patient {PacienteId}", pacienteId);
         var dispositivo = await _dispositivoService.VincularAsync(pacienteId, request.Nombre, request.MacAddress);
-        if (dispositivo == null) return BadRequest(new { message = "Ya tiene un dispositivo vinculado" });
+        if (dispositivo == null)
+        {
+            _logger.LogWarning("Patient {PacienteId} already has a linked device", pacienteId);
+            return BadRequest(new { message = "Ya tiene un dispositivo vinculado" });
+        }
 
         return Ok(new { DispositivoId = dispositivo.Id, message = "Dispositivo vinculado" });
     }
@@ -50,6 +58,7 @@ public class DispositivosController : ControllerBase
         var pacienteId = User.FindFirst("paciente_id")?.Value;
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
+        _logger.LogDebug("Heartbeat received for patient {PacienteId}", pacienteId);
         await _dispositivoService.HeartbeatAsync(pacienteId);
         return Ok(new { message = "Heartbeat recibido" });
     }
@@ -63,6 +72,7 @@ public class DispositivosController : ControllerBase
     [HttpGet("{pacienteId}")]
     public async Task<IActionResult> ObtenerPorPaciente(string pacienteId)
     {
+        _logger.LogInformation("Getting device for patient {PacienteId}", pacienteId);
         var dispositivo = await _dispositivoService.ObtenerPorPacienteAsync(pacienteId);
         if (dispositivo == null) return Ok(new { Vinculado = false });
 
@@ -86,8 +96,13 @@ public class DispositivosController : ControllerBase
         var pacienteId = User.FindFirst("paciente_id")?.Value;
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
+        _logger.LogInformation("Updating device {Id} name", id);
         var result = await _dispositivoService.ActualizarAsync(id, request.Nombre);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Device {Id} not found when attempting to update", id);
+            return NotFound();
+        }
         return Ok(new { message = "Dispositivo actualizado" });
     }
 
@@ -101,8 +116,13 @@ public class DispositivosController : ControllerBase
         var pacienteId = User.FindFirst("paciente_id")?.Value;
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
+        _logger.LogInformation("Unlinking device {Id}", id);
         var result = await _dispositivoService.EliminarAsync(id);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Device {Id} not found when attempting to unlink", id);
+            return NotFound();
+        }
         return NoContent();
     }
 }

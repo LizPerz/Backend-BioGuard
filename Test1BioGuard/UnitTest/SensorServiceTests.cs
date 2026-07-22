@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using Moq;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Config;
 using BioGuard.Api.Services;
 using BioGuard.Api.Models;
@@ -26,7 +27,8 @@ public class SensorServiceTests
         _mockDb.Setup(db => db.EventosMetabolicos).Returns(_mockEventos.Object);
         _mockDb.Setup(db => db.TrackingGps).Returns(_mockTracking.Object);
 
-        _service = new SensorService(_mockDb.Object);
+        var mockLogger = new Mock<ILogger<SensorService>>();
+        _service = new SensorService(_mockDb.Object, mockLogger.Object);
     }
 
     [Fact]

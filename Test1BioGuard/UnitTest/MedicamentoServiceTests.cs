@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using Moq;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Config;
 using BioGuard.Api.Services;
 using BioGuard.Api.Models;
@@ -18,7 +19,8 @@ public class MedicamentoServiceTests
         _mockDb = new Mock<IMongoDbContext>();
         _mockCollection = new Mock<IMongoCollection<Medicamento>>();
         _mockDb.Setup(db => db.Medicamentos).Returns(_mockCollection.Object);
-        _service = new MedicamentoService(_mockDb.Object);
+        var mockLogger = new Mock<ILogger<MedicamentoService>>();
+        _service = new MedicamentoService(_mockDb.Object, mockLogger.Object);
     }
 
     [Fact]

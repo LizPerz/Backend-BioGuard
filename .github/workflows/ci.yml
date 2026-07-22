@@ -32,6 +32,14 @@ jobs:
       - name: Build
         run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
 
+      - name: NuGet Vulnerability Audit
+        run: |
+          dotnet list ${{ env.PROJECT_PATH }} package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+          if dotnet list ${{ env.PROJECT_PATH }} package --vulnerable --include-transitive | grep -q "has the following vulnerable packages"; then
+            echo "::error::Vulnerable NuGet packages detected. See report above."
+            exit 1
+          fi
+
       - name: Run Unit Tests
         run: dotnet test ${{ env.TEST_PATH }} --configuration Release --no-build --filter "FullyQualifiedName!~IntegrationTests" --logger "trx;LogFileName=unit-tests.trx" --collect:"XPlat Code Coverage"
 

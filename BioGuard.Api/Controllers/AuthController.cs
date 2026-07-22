@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Services;
@@ -15,8 +16,13 @@ namespace BioGuard.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AuthService _authService;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(AuthService authService) => _authService = authService;
+    public AuthController(AuthService authService, ILogger<AuthController> logger)
+    {
+        _authService = authService;
+        _logger = logger;
+    }
 
     // ── Registro ──────────────────────────────────────────────
     // POST /api/Auth/register [WEB]
@@ -24,8 +30,14 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterWebRequest request)
     {
+        _logger.LogInformation("Register attempt for email: {Correo}", request.Correo);
         var result = await _authService.RegisterWebAsync(request);
-        if (result == null) return BadRequest(new { message = "El correo ya existe o plan inválido" });
+        if (result == null)
+        {
+            _logger.LogWarning("Register failed for email: {Correo} - email exists or invalid plan", request.Correo);
+            return BadRequest(new { message = "El correo ya existe o plan inválido" });
+        }
+        _logger.LogInformation("Register successful for email: {Correo}", request.Correo);
         return Ok(result);
     }
 
@@ -35,8 +47,14 @@ public class AuthController : ControllerBase
     [HttpPost("login-web")]
     public async Task<IActionResult> LoginWeb([FromBody] LoginWebRequest request)
     {
+        _logger.LogInformation("Web login attempt for email: {Correo}", request.Correo);
         var result = await _authService.LoginWebAsync(request);
-        if (result == null) return Unauthorized(new { message = "Credenciales inválidas" });
+        if (result == null)
+        {
+            _logger.LogWarning("Web login failed for email: {Correo} - invalid credentials", request.Correo);
+            return Unauthorized(new { message = "Credenciales inválidas" });
+        }
+        _logger.LogInformation("Web login successful for email: {Correo}", request.Correo);
         return Ok(result);
     }
 
@@ -45,8 +63,14 @@ public class AuthController : ControllerBase
     [HttpPost("login-google")]
     public async Task<IActionResult> LoginGoogle([FromBody] LoginGoogleRequest request)
     {
+        _logger.LogInformation("Google login attempt");
         var result = await _authService.LoginGoogleAsync(request);
-        if (result == null) return Unauthorized(new { message = "Token de Google inválido" });
+        if (result == null)
+        {
+            _logger.LogWarning("Google login failed - invalid Google token");
+            return Unauthorized(new { message = "Token de Google inválido" });
+        }
+        _logger.LogInformation("Google login successful");
         return Ok(result);
     }
 
@@ -55,8 +79,14 @@ public class AuthController : ControllerBase
     [HttpPost("login-codigo")]
     public async Task<IActionResult> LoginByCodigo([FromBody] LoginCodigoRequest request)
     {
+        _logger.LogInformation("Login by codigo attempt for code: {CodigoAcceso}", request.CodigoAcceso);
         var result = await _authService.LoginByCodigoAsync(request);
-        if (result == null) return NotFound(new { message = "Código no encontrado" });
+        if (result == null)
+        {
+            _logger.LogWarning("Login by codigo failed - code not found: {CodigoAcceso}", request.CodigoAcceso);
+            return NotFound(new { message = "Código no encontrado" });
+        }
+        _logger.LogInformation("Login by codigo successful");
         return Ok(result);
     }
 
@@ -66,8 +96,14 @@ public class AuthController : ControllerBase
     [HttpPost("2FA/enviar")]
     public async Task<IActionResult> Enviar2FA([FromBody] Enviar2FARequest request)
     {
+        _logger.LogInformation("2FA send attempt for email: {Email}", request.Correo);
         var result = await _authService.Enviar2FAAsync(request);
-        if (!result) return BadRequest(new { message = "Correo no encontrado o inactivo" });
+        if (!result)
+        {
+            _logger.LogWarning("2FA send failed for email: {Email} - email not found or inactive", request.Correo);
+            return BadRequest(new { message = "Correo no encontrado o inactivo" });
+        }
+        _logger.LogInformation("2FA code sent to email: {Email}", request.Correo);
         return Ok(new { message = "Código enviado al correo" });
     }
 
@@ -76,8 +112,14 @@ public class AuthController : ControllerBase
     [HttpPost("2FA/verificar")]
     public async Task<IActionResult> Verificar2FA([FromBody] Verificar2FARequest request)
     {
+        _logger.LogInformation("2FA verification attempt");
         var result = await _authService.Verificar2FAAsync(request);
-        if (result == null) return BadRequest(new { message = "Código inválido o expirado" });
+        if (result == null)
+        {
+            _logger.LogWarning("2FA verification failed - invalid or expired code");
+            return BadRequest(new { message = "Código inválido o expirado" });
+        }
+        _logger.LogInformation("2FA verification successful");
         return Ok(result);
     }
 
@@ -87,9 +129,15 @@ public class AuthController : ControllerBase
     [HttpPost("refresh")]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
     {
+        _logger.LogInformation("Token refresh attempt");
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var result = await _authService.RefreshTokenAsync(request, ip);
-        if (result == null) return Unauthorized(new { message = "Refresh token inválido o expirado" });
+        if (result == null)
+        {
+            _logger.LogWarning("Token refresh failed - invalid or expired refresh token");
+            return Unauthorized(new { message = "Refresh token inválido o expirado" });
+        }
+        _logger.LogInformation("Token refresh successful");
         return Ok(result);
     }
 
@@ -99,8 +147,14 @@ public class AuthController : ControllerBase
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
+        _logger.LogInformation("Forgot password attempt for email: {Correo}", request.Correo);
         var result = await _authService.ForgotPasswordAsync(request);
-        if (!result) return BadRequest(new { message = "Correo no encontrado" });
+        if (!result)
+        {
+            _logger.LogWarning("Forgot password failed for email: {Correo} - email not found", request.Correo);
+            return BadRequest(new { message = "Correo no encontrado" });
+        }
+        _logger.LogInformation("Password recovery email sent for email: {Correo}", request.Correo);
         return Ok(new { message = "Se envió un link de recuperación a tu correo" });
     }
 
@@ -109,8 +163,14 @@ public class AuthController : ControllerBase
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
+        _logger.LogInformation("Password reset attempt");
         var result = await _authService.ResetPasswordAsync(request);
-        if (!result) return BadRequest(new { message = "Token inválido o expirado" });
+        if (!result)
+        {
+            _logger.LogWarning("Password reset failed - invalid or expired token");
+            return BadRequest(new { message = "Token inválido o expirado" });
+        }
+        _logger.LogInformation("Password reset successful");
         return Ok(new { message = "Contraseña actualizada correctamente" });
     }
 
@@ -124,8 +184,35 @@ public class AuthController : ControllerBase
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (userId == null) return Unauthorized();
 
+        _logger.LogInformation("Password change attempt for user: {UserId}", userId);
         var result = await _authService.CambiarPasswordAsync(userId, request);
-        if (!result) return BadRequest(new { message = "Password actual incorrecto" });
+        if (!result)
+        {
+            _logger.LogWarning("Password change failed for user: {UserId} - incorrect current password", userId);
+            return BadRequest(new { message = "Password actual incorrecto" });
+        }
+        _logger.LogInformation("Password changed successfully for user: {UserId}", userId);
         return Ok(new { message = "Contraseña actualizada correctamente" });
+    }
+
+    // ── Logout ───────────────────────────────────────────────
+    // POST /api/Auth/logout [WEB]
+
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<IActionResult> Logout()
+    {
+        var jti = User.FindFirst("jti")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var expClaim = User.FindFirst("exp")?.Value;
+
+        if (jti == null) return BadRequest(new { message = "Token inválido" });
+
+        var expiresAt = expClaim != null
+            ? DateTimeOffset.FromUnixTimeSeconds(long.Parse(expClaim)).UtcDateTime
+            : DateTime.UtcNow.AddMinutes(30);
+
+        await _authService.RevokeTokenAsync(jti, expiresAt);
+        _logger.LogInformation("User logged out, token revoked: {Jti}", jti);
+        return Ok(new { message = "Sesión cerrada correctamente" });
     }
 }

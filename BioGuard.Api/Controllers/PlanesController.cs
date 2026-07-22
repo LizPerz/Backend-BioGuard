@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.DTOs;
@@ -17,8 +18,13 @@ namespace BioGuard.Api.Controllers;
 public class PlanesController : ControllerBase
 {
     private readonly IMongoDbContext _db;
+    private readonly ILogger<PlanesController> _logger;
 
-    public PlanesController(IMongoDbContext db) => _db = db;
+    public PlanesController(IMongoDbContext db, ILogger<PlanesController> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
 
     // ── Consulta ──────────────────────────────────────────────
     // GET /api/Planes [WEB]
@@ -26,6 +32,7 @@ public class PlanesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Listar()
     {
+        _logger.LogInformation("Listing active plans");
         var filter = Builders<Plan>.Filter.Eq(p => p.Activo, true);
         var sort = Builders<Plan>.Sort.Ascending(p => p.Orden);
         var planes = await _db.FindToListAsync(_db.Planes, filter, sort);
@@ -44,8 +51,13 @@ public class PlanesController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
+        _logger.LogInformation("Getting plan {Id}", id);
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == id);
-        if (plan == null) return NotFound();
+        if (plan == null)
+        {
+            _logger.LogWarning("Plan {Id} not found", id);
+            return NotFound();
+        }
 
         return Ok(new PlanResponse(
             plan.Id, plan.Nombre, plan.Precio, plan.PrecioMoneda,
@@ -61,6 +73,7 @@ public class PlanesController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Crear([FromBody] CrearPlanRequest request)
     {
+        _logger.LogInformation("Creating plan {Nombre}", request.Nombre);
         var plan = new Plan
         {
             Nombre = request.Nombre,
@@ -86,6 +99,7 @@ public class PlanesController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Editar(string id, [FromBody] CrearPlanRequest request)
     {
+        _logger.LogInformation("Updating plan {Id}", id);
         var update = Builders<Plan>.Update
             .Set(p => p.Nombre, request.Nombre)
             .Set(p => p.Precio, request.Precio)
@@ -99,7 +113,11 @@ public class PlanesController : ControllerBase
             .Set(p => p.Orden, request.Orden);
 
         var result = await _db.Planes.UpdateOneAsync(p => p.Id == id, update);
-        if (result.ModifiedCount == 0) return NotFound();
+        if (result.ModifiedCount == 0)
+        {
+            _logger.LogWarning("Plan {Id} not found when attempting to update", id);
+            return NotFound();
+        }
         return Ok(new { message = "Plan actualizado" });
     }
 
@@ -109,9 +127,14 @@ public class PlanesController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Eliminar(string id)
     {
+        _logger.LogInformation("Deactivating plan {Id}", id);
         var update = Builders<Plan>.Update.Set(p => p.Activo, false);
         var result = await _db.Planes.UpdateOneAsync(p => p.Id == id, update);
-        if (result.ModifiedCount == 0) return NotFound();
+        if (result.ModifiedCount == 0)
+        {
+            _logger.LogWarning("Plan {Id} not found when attempting to deactivate", id);
+            return NotFound();
+        }
         return Ok(new { message = "Plan desactivado" });
     }
 
@@ -122,8 +145,13 @@ public class PlanesController : ControllerBase
     public async Task<IActionResult> Seed()
     {
         var exists = await _db.FindToListAsync(_db.Planes, p => p.Activo == true);
-        if (exists.Any()) return BadRequest(new { message = "Ya existen planes activos" });
+        if (exists.Any())
+        {
+            _logger.LogWarning("Seed aborted: active plans already exist");
+            return BadRequest(new { message = "Ya existen planes activos" });
+        }
 
+        _logger.LogInformation("Seeding default plans");
         var planes = new List<Plan>
         {
             new()
@@ -154,6 +182,7 @@ public class PlanesController : ControllerBase
             await _db.Planes.InsertOneAsync(plan);
         }
 
+        _logger.LogInformation("Seeded {Count} plans", planes.Count);
         return Ok(new { message = "Planes sembrados", total = planes.Count });
     }
 
@@ -164,6 +193,7 @@ public class PlanesController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> MigratePrices()
     {
+        _logger.LogInformation("Migrating plan prices to MXN");
         var planUpdates = new Dictionary<string, (decimal Precio, int Cuidadores, string Desc)>
         {
             ["Gratis"] = (0m, 1, "Plan básico con funciones limitadas"),
@@ -183,6 +213,7 @@ public class PlanesController : ControllerBase
             updated += (int)result.ModifiedCount;
         }
 
+        _logger.LogInformation("Plan price migration completed, {Updated} plans updated", updated);
         return Ok(new { message = $"Planes actualizados a MXN", updated });
     }
 }

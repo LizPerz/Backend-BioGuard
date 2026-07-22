@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 
@@ -19,17 +20,20 @@ public class ReportesController : ControllerBase
     private readonly AlertaService _alertaService;
     private readonly MedicamentoService _medicamentoService;
     private readonly PacienteService _pacienteService;
+    private readonly ILogger<ReportesController> _logger;
 
     public ReportesController(
         SensorService sensorService,
         AlertaService alertaService,
         MedicamentoService medicamentoService,
-        PacienteService pacienteService)
+        PacienteService pacienteService,
+        ILogger<ReportesController> logger)
     {
         _sensorService = sensorService;
         _alertaService = alertaService;
         _medicamentoService = medicamentoService;
         _pacienteService = pacienteService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -44,8 +48,12 @@ public class ReportesController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching report summary - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Generating report summary for paciente: {PacienteId}", pacienteId);
         var lecturas = await _sensorService.ObtenerLecturasAsync(pacienteId, 1000);
         var eventos = await _sensorService.ObtenerEventosAsync(pacienteId, 1000);
         var alertas = await _alertaService.ObtenerPorPacienteAsync(pacienteId, 1000);
@@ -79,8 +87,12 @@ public class ReportesController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching alert history - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching alert history for paciente: {PacienteId}, limit: {Limite}", pacienteId, limite);
         var alertas = await _alertaService.ObtenerPorPacienteAsync(pacienteId, limite);
         var response = alertas.Select(a => new ReporteAlertaResponse(
             a.Id, a.Tipo, a.Nivel, a.Titulo, a.Mensaje,
@@ -99,8 +111,12 @@ public class ReportesController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching event history - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching event history for paciente: {PacienteId}, limit: {Limite}", pacienteId, limite);
         var eventos = await _sensorService.ObtenerEventosAsync(pacienteId, limite);
         var response = eventos.Select(e => new ReporteEventoResponse(
             e.Id, e.NivelRiesgo, e.ProbabilidadMl, e.Descripcion,
@@ -119,8 +135,12 @@ public class ReportesController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching medication history - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching medication history for paciente: {PacienteId}", pacienteId);
         var medicamentos = await _medicamentoService.ObtenerPorPacienteAsync(pacienteId);
         var response = medicamentos.Select(m => new ReporteMedicamentoResponse(
             m.Id, m.Nombre, m.Dosis, m.Horario, m.Activo, m.UltimaToma));
@@ -139,8 +159,12 @@ public class ReportesController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching reading history - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching reading history for paciente: {PacienteId}, limit: {Limite}", pacienteId, limite);
         var lecturas = await _sensorService.ObtenerLecturasAsync(pacienteId, limite);
         var response = lecturas.Select(l => new
         {

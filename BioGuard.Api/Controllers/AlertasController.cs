@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Models;
@@ -18,11 +19,13 @@ public class AlertasController : ControllerBase
 {
     private readonly AlertaService _alertaService;
     private readonly PacienteService _pacienteService;
+    private readonly ILogger<AlertasController> _logger;
 
-    public AlertasController(AlertaService alertaService, PacienteService pacienteService)
+    public AlertasController(AlertaService alertaService, PacienteService pacienteService, ILogger<AlertasController> logger)
     {
         _alertaService = alertaService;
         _pacienteService = pacienteService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -36,8 +39,12 @@ public class AlertasController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching alerts - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching alerts for paciente: {PacienteId}, limit: {Limite}", pacienteId, limite);
         var alertas = await _alertaService.ObtenerPorPacienteAsync(pacienteId, limite);
         var response = alertas.Select(a => new AlertaResponse(
             a.Id, a.PacienteId, a.Tipo, a.Nivel, a.Titulo, a.Mensaje,
@@ -56,8 +63,12 @@ public class AlertasController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching pending alerts - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching pending alerts for paciente: {PacienteId}", pacienteId);
         var alertas = await _alertaService.ObtenerPendientesAsync(pacienteId);
         var response = alertas.Select(a => new AlertaResponse(
             a.Id, a.PacienteId, a.Tipo, a.Nivel, a.Titulo, a.Mensaje,
@@ -71,15 +82,23 @@ public class AlertasController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
+        _logger.LogInformation("Fetching alert by ID: {AlertaId}", id);
         var alerta = await _alertaService.ObtenerPorIdAsync(id);
-        if (alerta == null) return NotFound();
+        if (alerta == null)
+        {
+            _logger.LogWarning("Alert not found: {AlertaId}", id);
+            return NotFound();
+        }
 
         var usuarioId = User.FindFirst("sub")?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(alerta.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching alert - user: {UserId}, paciente: {PacienteId}", usuarioId, alerta.PacienteId);
             return Forbid();
+        }
 
         return Ok(new AlertaResponse(
             alerta.Id, alerta.PacienteId, alerta.Tipo, alerta.Nivel,
@@ -94,6 +113,7 @@ public class AlertasController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Crear([FromBody] CrearAlertaRequest request)
     {
+        _logger.LogInformation("Creating alert for paciente: {PacienteId}, type: {Tipo}, level: {Nivel}", request.PacienteId, request.Tipo, request.Nivel);
         var sensorData = new SensorData
         {
             PulsoBpm = request.PulsoBpm,
@@ -106,6 +126,7 @@ public class AlertasController : ControllerBase
             request.PacienteId, request.Tipo, request.Nivel,
             request.Titulo, request.Mensaje, sensorData);
 
+        _logger.LogInformation("Alert created successfully: {AlertaId}", alerta.Id);
         return Ok(new { AlertaId = alerta.Id, message = "Alerta creada" });
     }
 
@@ -115,8 +136,14 @@ public class AlertasController : ControllerBase
     [HttpPut("{id}/resolver")]
     public async Task<IActionResult> Resolver(string id, [FromBody] ResolverAlertaRequest request)
     {
+        _logger.LogInformation("Resolving alert: {AlertaId}, cuidador: {CuidadorId}", id, request.CuidadorId);
         var result = await _alertaService.ResolverAsync(id, request.CuidadorId, request.AccionTomada);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Alert not found for resolution: {AlertaId}", id);
+            return NotFound();
+        }
+        _logger.LogInformation("Alert resolved successfully: {AlertaId}", id);
         return Ok(new { message = "Alerta resuelta" });
     }
 
@@ -127,17 +154,31 @@ public class AlertasController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Eliminar(string id)
     {
+        _logger.LogInformation("Deleting alert: {AlertaId}", id);
         var alerta = await _alertaService.ObtenerPorIdAsync(id);
-        if (alerta == null) return NotFound();
+        if (alerta == null)
+        {
+            _logger.LogWarning("Alert not found for deletion: {AlertaId}", id);
+            return NotFound();
+        }
 
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         var paciente = await _pacienteService.GetByIdAsync(alerta.PacienteId);
-        if (paciente?.UsuarioWebId != usuarioId) return Forbid();
+        if (paciente?.UsuarioWebId != usuarioId)
+        {
+            _logger.LogWarning("Ownership check failed deleting alert - user: {UserId}, paciente: {PacienteId}", usuarioId, alerta.PacienteId);
+            return Forbid();
+        }
 
         var result = await _alertaService.EliminarAsync(id);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Alert deletion failed: {AlertaId}", id);
+            return NotFound();
+        }
+        _logger.LogInformation("Alert deleted successfully: {AlertaId}", id);
         return NoContent();
     }
 

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 
@@ -18,13 +19,15 @@ public class PacientesController : ControllerBase
     private readonly PacienteService _pacienteService;
     private readonly SensorService _sensorService;
     private readonly DispositivoService _dispositivoService;
+    private readonly ILogger<PacientesController> _logger;
 
     public PacientesController(PacienteService pacienteService, SensorService sensorService,
-        DispositivoService dispositivoService)
+        DispositivoService dispositivoService, ILogger<PacientesController> logger)
     {
         _pacienteService = pacienteService;
         _sensorService = sensorService;
         _dispositivoService = dispositivoService;
+        _logger = logger;
     }
 
     // ── Consulta ──────────────────────────────────────────────
@@ -39,9 +42,14 @@ public class PacientesController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        _logger.LogInformation("Fetching mi-paciente for user: {UserId}", usuarioId);
         var pacientes = await _pacienteService.GetAllByUsuarioAsync(usuarioId);
         var paciente = pacientes.FirstOrDefault();
-        if (paciente == null) return NotFound(new { message = "No tiene paciente registrado" });
+        if (paciente == null)
+        {
+            _logger.LogWarning("No patient found for user: {UserId}", usuarioId);
+            return NotFound(new { message = "No tiene paciente registrado" });
+        }
 
         return Ok(new PacienteResponse(
             paciente.Id, paciente.Nombre, paciente.Biometria?.EsDiabetico ?? false,
@@ -60,10 +68,18 @@ public class PacientesController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed for user: {UserId}, paciente: {PacienteId}, role: {Role}", usuarioId, id, role);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching paciente by ID: {PacienteId}", id);
         var paciente = await _pacienteService.GetByIdAsync(id);
-        if (paciente == null) return NotFound();
+        if (paciente == null)
+        {
+            _logger.LogWarning("Paciente not found: {PacienteId}", id);
+            return NotFound();
+        }
 
         return Ok(new PacienteResponse(
             paciente.Id, paciente.Nombre, paciente.Biometria?.EsDiabetico ?? false,
@@ -82,8 +98,12 @@ public class PacientesController : ControllerBase
         if (string.IsNullOrEmpty(currentUserId)) return Unauthorized();
 
         if (role != "dueno" || currentUserId != usuarioWebId)
+        {
+            _logger.LogWarning("Ownership check failed listing patients - current user: {UserId}, requested user: {RequestedUserId}, role: {Role}", currentUserId, usuarioWebId, role);
             return Forbid();
+        }
 
+        _logger.LogInformation("Listing patients for user: {UserId}", usuarioWebId);
         var pacientes = await _pacienteService.GetAllByUsuarioAsync(usuarioWebId);
         var response = pacientes.Select(p => new PacienteResponse(
             p.Id, p.Nombre, p.Biometria?.EsDiabetico ?? false,
@@ -104,7 +124,9 @@ public class PacientesController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        _logger.LogInformation("Creating paciente for user: {UserId}, name: {Nombre}", usuarioId, request.Nombre);
         var codigo = await _pacienteService.CrearPacienteAsync(usuarioId, request.Nombre);
+        _logger.LogInformation("Paciente created successfully for user: {UserId}", usuarioId);
         return Ok(new { message = "Paciente creado", CodigoAccesoQr = codigo });
     }
 
@@ -120,10 +142,19 @@ public class PacientesController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(id, usuarioId, "dueno"))
+        {
+            _logger.LogWarning("Ownership check failed editing paciente - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
             return Forbid();
+        }
 
+        _logger.LogInformation("Editing paciente: {PacienteId}, new name: {Nombre}", id, request.Nombre);
         var result = await _pacienteService.UpdateNombreAsync(id, request.Nombre);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Paciente not found for edit: {PacienteId}", id);
+            return NotFound();
+        }
+        _logger.LogInformation("Paciente edited successfully: {PacienteId}", id);
         return Ok(new { message = "Paciente actualizado" });
     }
 
@@ -139,10 +170,19 @@ public class PacientesController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(id, usuarioId, "dueno"))
+        {
+            _logger.LogWarning("Ownership check failed deleting paciente - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
             return Forbid();
+        }
 
+        _logger.LogInformation("Deleting paciente: {PacienteId}", id);
         var result = await _pacienteService.EliminarAsync(id);
-        if (!result) return NotFound();
+        if (!result)
+        {
+            _logger.LogWarning("Paciente not found for deletion: {PacienteId}", id);
+            return NotFound();
+        }
+        _logger.LogInformation("Paciente deleted successfully: {PacienteId}", id);
         return NoContent();
     }
 
@@ -155,7 +195,9 @@ public class PacientesController : ControllerBase
     [HttpPut("{id}/biometria")]
     public async Task<IActionResult> UpdateBiometria(string id, [FromBody] UpdateBiometriaRequest request)
     {
+        _logger.LogInformation("Updating biometria for paciente: {PacienteId}", id);
         await _pacienteService.UpdateBiometriaAsync(id, request);
+        _logger.LogInformation("Biometria updated for paciente: {PacienteId}", id);
         return Ok(new { message = "Biometría actualizada" });
     }
 
@@ -168,8 +210,13 @@ public class PacientesController : ControllerBase
     [HttpGet("{id}/qr")]
     public async Task<IActionResult> ObtenerQR(string id)
     {
+        _logger.LogInformation("Fetching QR for paciente: {PacienteId}", id);
         var paciente = await _pacienteService.GetByIdAsync(id);
-        if (paciente == null) return NotFound();
+        if (paciente == null)
+        {
+            _logger.LogWarning("Paciente not found for QR: {PacienteId}", id);
+            return NotFound();
+        }
         return Ok(new { CodigoAccesoQr = paciente.CodigoAccesoQr });
     }
 
@@ -180,10 +227,16 @@ public class PacientesController : ControllerBase
     [HttpPost("{id}/regenerar-qr")]
     public async Task<IActionResult> RegenerarQR(string id)
     {
+        _logger.LogInformation("Regenerating QR for paciente: {PacienteId}", id);
         var paciente = await _pacienteService.GetByIdAsync(id);
-        if (paciente == null) return NotFound();
+        if (paciente == null)
+        {
+            _logger.LogWarning("Paciente not found for QR regen: {PacienteId}", id);
+            return NotFound();
+        }
 
         var codigo = await _pacienteService.CrearPacienteAsync(paciente.UsuarioWebId, paciente.Nombre);
+        _logger.LogInformation("QR regenerated for paciente: {PacienteId}", id);
         return Ok(new { CodigoAccesoQr = codigo, message = "QR regenerado" });
     }
 
@@ -201,8 +254,12 @@ public class PacientesController : ControllerBase
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching device - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
             return Forbid();
+        }
 
+        _logger.LogInformation("Fetching device for paciente: {PacienteId}", id);
         var dispositivo = await _dispositivoService.ObtenerPorPacienteAsync(id);
         if (dispositivo == null) return Ok(new { Vinculado = false });
         return Ok(new

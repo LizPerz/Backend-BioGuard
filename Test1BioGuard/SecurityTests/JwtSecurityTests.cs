@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using BioGuard.Api.Services;
 
@@ -24,7 +25,8 @@ public class JwtSecurityTests
         }).Build();
 
         var mockDb = new Moq.Mock<BioGuard.Api.Config.IMongoDbContext>();
-        _service = new AuthService(mockDb.Object, config, new HttpClient());
+        var mockLogger = new Moq.Mock<ILogger<AuthService>>();
+        _service = new AuthService(mockDb.Object, config, new HttpClient(), mockLogger.Object);
     }
 
     [Fact]
