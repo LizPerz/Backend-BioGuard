@@ -16,11 +16,13 @@ namespace BioGuard.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AuthService _authService;
+    private readonly AuditoriaService _auditoriaService;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(AuthService authService, ILogger<AuthController> logger)
+    public AuthController(AuthService authService, AuditoriaService auditoriaService, ILogger<AuthController> logger)
     {
         _authService = authService;
+        _auditoriaService = auditoriaService;
         _logger = logger;
     }
 
@@ -38,6 +40,8 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "El correo ya existe o plan inválido" });
         }
         _logger.LogInformation("Register successful for email: {Correo}", request.Correo);
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(result.UserId, "registro", "usuarios_web", result.UserId, ip);
         return Ok(result);
     }
 
@@ -52,9 +56,17 @@ public class AuthController : ControllerBase
         if (result == null)
         {
             _logger.LogWarning("Web login failed for email: {Correo} - invalid credentials", request.Correo);
+            var failIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            await _auditoriaService.RegistrarAsync("unknown", "login_fallido", "usuarios_web", request.Correo, failIp);
             return Unauthorized(new { message = "Credenciales inválidas" });
         }
         _logger.LogInformation("Web login successful for email: {Correo}", request.Correo);
+        var loginIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(result.UserId, "login", "usuarios_web", result.UserId, loginIp);
+        if (result.Requires2FA)
+        {
+            return Ok(new { message = "Código 2FA enviado al correo", requires2FA = true, userId = result.UserId });
+        }
         return Ok(result);
     }
 
@@ -192,6 +204,8 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Password actual incorrecto" });
         }
         _logger.LogInformation("Password changed successfully for user: {UserId}", userId);
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(userId, "cambiar_password", "usuarios_web", userId, ip);
         return Ok(new { message = "Contraseña actualizada correctamente" });
     }
 
@@ -213,6 +227,9 @@ public class AuthController : ControllerBase
 
         await _authService.RevokeTokenAsync(jti, expiresAt);
         _logger.LogInformation("User logged out, token revoked: {Jti}", jti);
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(userId, "logout", "usuarios_web", userId, ip);
         return Ok(new { message = "Sesión cerrada correctamente" });
     }
 }

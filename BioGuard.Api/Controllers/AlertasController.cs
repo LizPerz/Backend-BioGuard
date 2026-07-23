@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Models;
+using BioGuard.Api.Config;
 
 namespace BioGuard.Api.Controllers;
 
@@ -19,12 +20,14 @@ public class AlertasController : ControllerBase
 {
     private readonly AlertaService _alertaService;
     private readonly PacienteService _pacienteService;
+    private readonly IMongoDbContext _db;
     private readonly ILogger<AlertasController> _logger;
 
-    public AlertasController(AlertaService alertaService, PacienteService pacienteService, ILogger<AlertasController> logger)
+    public AlertasController(AlertaService alertaService, PacienteService pacienteService, IMongoDbContext db, ILogger<AlertasController> logger)
     {
         _alertaService = alertaService;
         _pacienteService = pacienteService;
+        _db = db;
         _logger = logger;
     }
 
@@ -185,7 +188,11 @@ public class AlertasController : ControllerBase
     private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
     {
         if (role == "paciente") return pacienteId == userId;
-        if (role == "cuidador") return true;
+        if (role == "cuidador")
+        {
+            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
+            return cuidador != null;
+        }
 
         var paciente = await _pacienteService.GetByIdAsync(pacienteId);
         return paciente?.UsuarioWebId == userId;

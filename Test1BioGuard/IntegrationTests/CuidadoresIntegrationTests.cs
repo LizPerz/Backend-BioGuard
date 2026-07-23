@@ -195,6 +195,11 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
             }
         };
 
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = "pac123", UsuarioWebId = "user123", Nombre = "Juan Perez" });
+
         _mockDb.Setup(db => db.FindToListAsync(
                 It.IsAny<IMongoCollection<Cuidador>>(),
                 It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))

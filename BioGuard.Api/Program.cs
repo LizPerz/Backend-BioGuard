@@ -4,6 +4,7 @@ using AspNetCoreRateLimit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.Services;
 
@@ -106,6 +107,36 @@ builder.Services.Configure<IpRateLimitOptions>(options =>
             Endpoint = "*:*:post",
             Period = "1m",
             Limit = 30
+        },
+        new RateLimitRule
+        {
+            Endpoint = "post:/api/Auth/login-web",
+            Period = "1m",
+            Limit = 5
+        },
+        new RateLimitRule
+        {
+            Endpoint = "post:/api/Auth/register",
+            Period = "1m",
+            Limit = 3
+        },
+        new RateLimitRule
+        {
+            Endpoint = "post:/api/Auth/2FA/enviar",
+            Period = "1m",
+            Limit = 3
+        },
+        new RateLimitRule
+        {
+            Endpoint = "post:/api/Auth/2FA/verificar",
+            Period = "1m",
+            Limit = 5
+        },
+        new RateLimitRule
+        {
+            Endpoint = "post:/api/Auth/forgot-password",
+            Period = "1m",
+            Limit = 3
         }
     };
 });
@@ -189,13 +220,30 @@ builder.Services.AddCors(options =>
     options.AddPolicy("BioGuardPolicy", policy =>
     {
         policy.WithOrigins(allowedOrigins)
-              .AllowAnyMethod()
-              .AllowAnyHeader()
+              .WithMethods("GET", "POST", "PUT", "DELETE")
+              .WithHeaders("Authorization", "Content-Type", "Accept")
               .AllowCredentials();
     });
 });
 
 var app = builder.Build();
+
+// =============================================
+// MONGODB TTL INDEXES
+// =============================================
+try
+{
+    using var scope = app.Services.CreateScope();
+    var mongoDbContext = scope.ServiceProvider.GetRequiredService<IMongoDbContext>();
+    await CreateTtlIndex(mongoDbContext.LecturasSensores, "expireAt", 0);
+    await CreateTtlIndex(mongoDbContext.RefreshTokens, "expires_at", 0);
+    await CreateTtlIndex(mongoDbContext.TokenBlacklist, "expires_at", 0);
+}
+catch (Exception ex)
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogWarning(ex, "Failed to create TTL indexes at startup");
+}
 
 // =============================================
 // MIDDLEWARE PIPELINE
@@ -238,6 +286,14 @@ app.MapHub<BioGuardHub>("/hubs/bioguard");
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
 app.Run();
+
+static async Task CreateTtlIndex<T>(IMongoCollection<T> collection, string fieldName, int expirationSeconds)
+{
+    var indexKeys = Builders<T>.IndexKeys.Ascending(fieldName);
+    var indexOptions = new CreateIndexOptions { ExpireAfter = TimeSpan.FromSeconds(expirationSeconds) };
+    var indexModel = new CreateIndexModel<T>(indexKeys, indexOptions);
+    await collection.Indexes.CreateOneAsync(indexModel);
+}
 
 // ReSharper disable once EmptyNamespaceDeclaration
 namespace BioGuard.Api

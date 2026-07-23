@@ -22,7 +22,7 @@ public record LoginGoogleRequest(
 public record LoginCodigoRequest(
     [Required] [StringLength(50)] string CodigoAcceso);
 
-public record AuthResponse(string Token, string UserId, string Nombre, string Rol, string Plan);
+public record AuthResponse(string Token, string UserId, string Nombre, string Rol, string Plan, bool Requires2FA = false);
 
 public record RefreshTokenRequest(
     [Required] string RefreshToken);
@@ -51,7 +51,7 @@ public record CambiarPasswordRequest(
 
 public record PacienteResponse(
     string Id, string Nombre, bool EsDiabetico,
-    bool PerfilCompletado, string CodigoAccesoQr);
+    bool PerfilCompletado);
 
 public record UpdateBiometriaRequest(
     [Range(0, 150)] int Edad,
@@ -69,7 +69,7 @@ public record UpdateNombreRequest(
 
 public record CuidadorResponse(
     string Id, string Nombre, string Parentesco,
-    string PacienteId, string CodigoAccesoQr);
+    string PacienteId);
 
 public record CrearCuidadorRequest(
     [Required] string PacienteId,

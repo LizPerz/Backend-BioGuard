@@ -3,6 +3,7 @@
 **/.env
 **/.git
 **/.gitignore
+**/.github
 **/.project
 **/.settings
 **/.toolstarget
@@ -16,6 +17,7 @@
 **/charts
 **/docker-compose*
 **/Dockerfile*
+**/env.example
 **/node_modules
 **/npm-debug.log
 **/obj
@@ -23,4 +25,3 @@
 **/values.dev.yaml
 LICENSE
 README.md
-!**/.gitignore

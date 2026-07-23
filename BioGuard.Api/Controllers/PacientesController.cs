@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
+using BioGuard.Api.Config;
 
 namespace BioGuard.Api.Controllers;
 
@@ -19,14 +20,18 @@ public class PacientesController : ControllerBase
     private readonly PacienteService _pacienteService;
     private readonly SensorService _sensorService;
     private readonly DispositivoService _dispositivoService;
+    private readonly IMongoDbContext _db;
+    private readonly AuditoriaService _auditoriaService;
     private readonly ILogger<PacientesController> _logger;
 
     public PacientesController(PacienteService pacienteService, SensorService sensorService,
-        DispositivoService dispositivoService, ILogger<PacientesController> logger)
+        DispositivoService dispositivoService, IMongoDbContext db, AuditoriaService auditoriaService, ILogger<PacientesController> logger)
     {
         _pacienteService = pacienteService;
         _sensorService = sensorService;
         _dispositivoService = dispositivoService;
+        _db = db;
+        _auditoriaService = auditoriaService;
         _logger = logger;
     }
 
@@ -53,7 +58,7 @@ public class PacientesController : ControllerBase
 
         return Ok(new PacienteResponse(
             paciente.Id, paciente.Nombre, paciente.Biometria?.EsDiabetico ?? false,
-            paciente.PerfilCompletado, paciente.CodigoAccesoQr));
+            paciente.PerfilCompletado));
     }
 
     /// <summary>
@@ -83,7 +88,7 @@ public class PacientesController : ControllerBase
 
         return Ok(new PacienteResponse(
             paciente.Id, paciente.Nombre, paciente.Biometria?.EsDiabetico ?? false,
-            paciente.PerfilCompletado, paciente.CodigoAccesoQr));
+            paciente.PerfilCompletado));
     }
 
     /// <summary>
@@ -107,7 +112,7 @@ public class PacientesController : ControllerBase
         var pacientes = await _pacienteService.GetAllByUsuarioAsync(usuarioWebId);
         var response = pacientes.Select(p => new PacienteResponse(
             p.Id, p.Nombre, p.Biometria?.EsDiabetico ?? false,
-            p.PerfilCompletado, p.CodigoAccesoQr)).ToList();
+            p.PerfilCompletado)).ToList();
         return Ok(response);
     }
 
@@ -127,6 +132,8 @@ public class PacientesController : ControllerBase
         _logger.LogInformation("Creating paciente for user: {UserId}, name: {Nombre}", usuarioId, request.Nombre);
         var codigo = await _pacienteService.CrearPacienteAsync(usuarioId, request.Nombre);
         _logger.LogInformation("Paciente created successfully for user: {UserId}", usuarioId);
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(usuarioId, "crear", "pacientes", codigo, ip);
         return Ok(new { message = "Paciente creado", CodigoAccesoQr = codigo });
     }
 
@@ -155,6 +162,8 @@ public class PacientesController : ControllerBase
             return NotFound();
         }
         _logger.LogInformation("Paciente edited successfully: {PacienteId}", id);
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(usuarioId, "editar", "pacientes", id, ip);
         return Ok(new { message = "Paciente actualizado" });
     }
 
@@ -183,6 +192,8 @@ public class PacientesController : ControllerBase
             return NotFound();
         }
         _logger.LogInformation("Paciente deleted successfully: {PacienteId}", id);
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(usuarioId, "eliminar", "pacientes", id, ip);
         return NoContent();
     }
 
@@ -195,6 +206,16 @@ public class PacientesController : ControllerBase
     [HttpPut("{id}/biometria")]
     public async Task<IActionResult> UpdateBiometria(string id, [FromBody] UpdateBiometriaRequest request)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed updating biometria - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
+            return Forbid();
+        }
+
         _logger.LogInformation("Updating biometria for paciente: {PacienteId}", id);
         await _pacienteService.UpdateBiometriaAsync(id, request);
         _logger.LogInformation("Biometria updated for paciente: {PacienteId}", id);
@@ -210,6 +231,16 @@ public class PacientesController : ControllerBase
     [HttpGet("{id}/qr")]
     public async Task<IActionResult> ObtenerQR(string id)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching QR - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
+            return Forbid();
+        }
+
         _logger.LogInformation("Fetching QR for paciente: {PacienteId}", id);
         var paciente = await _pacienteService.GetByIdAsync(id);
         if (paciente == null)
@@ -227,6 +258,16 @@ public class PacientesController : ControllerBase
     [HttpPost("{id}/regenerar-qr")]
     public async Task<IActionResult> RegenerarQR(string id)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed regenerating QR - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
+            return Forbid();
+        }
+
         _logger.LogInformation("Regenerating QR for paciente: {PacienteId}", id);
         var paciente = await _pacienteService.GetByIdAsync(id);
         if (paciente == null)
@@ -275,6 +316,11 @@ public class PacientesController : ControllerBase
     private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
     {
         if (role == "paciente") return pacienteId == userId;
+        if (role == "cuidador")
+        {
+            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
+            return cuidador != null;
+        }
 
         var pacientes = await _pacienteService.GetAllByUsuarioAsync(userId);
         return pacientes.Any(p => p.Id == pacienteId);

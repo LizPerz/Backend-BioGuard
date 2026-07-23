@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
+using BioGuard.Api.Config;
 
 namespace BioGuard.Api.Controllers;
 
@@ -18,12 +19,16 @@ public class SensoresController : ControllerBase
 {
     private readonly SensorService _sensorService;
     private readonly PacienteService _pacienteService;
+    private readonly IMongoDbContext _db;
+    private readonly AuditoriaService _auditoriaService;
     private readonly ILogger<SensoresController> _logger;
 
-    public SensoresController(SensorService sensorService, PacienteService pacienteService, ILogger<SensoresController> logger)
+    public SensoresController(SensorService sensorService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, ILogger<SensoresController> logger)
     {
         _sensorService = sensorService;
         _pacienteService = pacienteService;
+        _db = db;
+        _auditoriaService = auditoriaService;
         _logger = logger;
     }
 
@@ -44,6 +49,10 @@ public class SensoresController : ControllerBase
             pacienteId, "wearos-001", request.PulsoBpm, request.TemperaturaC,
             request.SudoracionGsr, 0.0);
 
+        var usuarioId = User.FindFirst("sub")?.Value ?? "unknown";
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(usuarioId, "insertar_lectura", "lecturas_sensores", lectura.Id, ip);
+
         return Ok(new { LecturaId = lectura.Id, message = "Lectura recibida" });
     }
 
@@ -52,6 +61,7 @@ public class SensoresController : ControllerBase
     /// MÓDULO 5: Subir lote de lecturas offline (SQLite → API)
     /// </summary>
     [HttpPost("lectura-batch")]
+    [RequestSizeLimit(10485760)]
     public async Task<IActionResult> RecibirLecturaBatch([FromBody] List<LecturaSensorRequest> request)
     {
         var pacienteId = User.FindFirst("paciente_id")?.Value;
@@ -353,6 +363,7 @@ public class SensoresController : ControllerBase
     /// MÓDULO 5: Subir lote de GPS offline
     /// </summary>
     [HttpPost("tracking-batch")]
+    [RequestSizeLimit(10485760)]
     public async Task<IActionResult> InsertarTrackingBatch([FromBody] List<TrackingGpsRequest> request)
     {
         var pacienteId = User.FindFirst("paciente_id")?.Value;
@@ -430,7 +441,11 @@ public class SensoresController : ControllerBase
     private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
     {
         if (role == "paciente") return pacienteId == userId;
-        if (role == "cuidador") return true;
+        if (role == "cuidador")
+        {
+            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
+            return cuidador != null;
+        }
 
         var paciente = await _pacienteService.GetByIdAsync(pacienteId);
         return paciente?.UsuarioWebId == userId;
