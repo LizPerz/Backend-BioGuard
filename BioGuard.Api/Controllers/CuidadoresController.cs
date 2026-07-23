@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
+using BioGuard.Api.Config;
 
 namespace BioGuard.Api.Controllers;
 
@@ -18,12 +19,14 @@ public class CuidadoresController : ControllerBase
 {
     private readonly CuidadorService _cuidadorService;
     private readonly PacienteService _pacienteService;
+    private readonly IMongoDbContext _db;
     private readonly ILogger<CuidadoresController> _logger;
 
-    public CuidadoresController(CuidadorService cuidadorService, PacienteService pacienteService, ILogger<CuidadoresController> logger)
+    public CuidadoresController(CuidadorService cuidadorService, PacienteService pacienteService, IMongoDbContext db, ILogger<CuidadoresController> logger)
     {
         _cuidadorService = cuidadorService;
         _pacienteService = pacienteService;
+        _db = db;
         _logger = logger;
     }
 
@@ -42,7 +45,7 @@ public class CuidadoresController : ControllerBase
         _logger.LogInformation("Listing cuidadores for user: {UserId}", usuarioId);
         var cuidadores = await _cuidadorService.ObtenerPorUsuarioAsync(usuarioId);
         var response = cuidadores.Select(c => new CuidadorResponse(
-            c.Id, c.Nombre, c.Parentesco, c.PacienteId, c.CodigoAccesoQr)).ToList();
+            c.Id, c.Nombre, c.Parentesco, c.PacienteId)).ToList();
         return Ok(response);
     }
 
@@ -94,7 +97,7 @@ public class CuidadoresController : ControllerBase
 
         return Ok(new CuidadorResponse(
             cuidador.Id, cuidador.Nombre, cuidador.Parentesco,
-            cuidador.PacienteId, cuidador.CodigoAccesoQr));
+            cuidador.PacienteId));
     }
 
     /// <summary>
@@ -104,10 +107,20 @@ public class CuidadoresController : ControllerBase
     [HttpGet("by-paciente/{pacienteId}")]
     public async Task<IActionResult> GetByPaciente(string pacienteId)
     {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching cuidadores by paciente - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
+            return Forbid();
+        }
+
         _logger.LogInformation("Fetching cuidadores for paciente: {PacienteId}", pacienteId);
         var cuidadores = await _cuidadorService.ObtenerPorPacienteAsync(pacienteId);
         var response = cuidadores.Select(c => new CuidadorResponse(
-            c.Id, c.Nombre, c.Parentesco, c.PacienteId, c.CodigoAccesoQr)).ToList();
+            c.Id, c.Nombre, c.Parentesco, c.PacienteId)).ToList();
         return Ok(response);
     }
 
@@ -216,13 +229,13 @@ public class CuidadoresController : ControllerBase
     [HttpGet("{id}/qr")]
     public async Task<IActionResult> ObtenerQR(string id)
     {
-        _logger.LogInformation("Fetching QR for cuidador: {CuidadorId}", id);
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null) return Unauthorized();
         var cuidador = await _cuidadorService.ObtenerPorIdAsync(id);
-        if (cuidador == null)
-        {
-            _logger.LogWarning("Cuidador not found for QR: {CuidadorId}", id);
-            return NotFound();
-        }
+        if (cuidador == null) return NotFound();
+        if (cuidador.UsuarioWebId != userId && User.FindFirst(ClaimTypes.Role)?.Value != "admin") return Forbid();
+
+        _logger.LogInformation("Fetching QR for cuidador: {CuidadorId}", id);
         return Ok(new { CodigoAccesoQr = cuidador.CodigoAccesoQr });
     }
 
@@ -233,16 +246,29 @@ public class CuidadoresController : ControllerBase
     [HttpPost("{id}/regenerar-qr")]
     public async Task<IActionResult> RegenerarQR(string id)
     {
-        _logger.LogInformation("Regenerating QR for cuidador: {CuidadorId}", id);
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null) return Unauthorized();
         var cuidador = await _cuidadorService.ObtenerPorIdAsync(id);
-        if (cuidador == null)
-        {
-            _logger.LogWarning("Cuidador not found for QR regen: {CuidadorId}", id);
-            return NotFound();
-        }
+        if (cuidador == null) return NotFound();
+        if (cuidador.UsuarioWebId != userId && User.FindFirst(ClaimTypes.Role)?.Value != "admin") return Forbid();
+
+        _logger.LogInformation("Regenerating QR for cuidador: {CuidadorId}", id);
 
         var codigo = await _cuidadorService.RegenerarQRAsync(id);
         _logger.LogInformation("QR regenerated for cuidador: {CuidadorId}", id);
         return Ok(new { CodigoAccesoQr = codigo, message = "QR regenerado" });
+    }
+
+    private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
+    {
+        if (role == "paciente") return pacienteId == userId;
+        if (role == "cuidador")
+        {
+            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
+            return cuidador != null;
+        }
+
+        var paciente = await _pacienteService.GetByIdAsync(pacienteId);
+        return paciente?.UsuarioWebId == userId;
     }
 }

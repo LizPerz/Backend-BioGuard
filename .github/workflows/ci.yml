@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [master, main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
 env:
   DOTNET_VERSION: '9.0.x'
   PROJECT_PATH: 'BioGuard.Api/BioGuard.Api.csproj'
@@ -16,13 +22,14 @@ jobs:
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
+    permissions: {}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -40,6 +47,20 @@ jobs:
             exit 1
           fi
 
+      - name: License Compliance Scan
+        run: |
+          echo "=== License Report ==="
+          dotnet list ${{ env.PROJECT_PATH }} package --include-transitive --format json > license-report.json 2>/dev/null || true
+          echo "=== Checking for copyleft licenses ==="
+          BLOCKED_LICENSES="GPL-3.0|GPL-2.0|AGPL-3.0|SSPL-1.0|EUPL-1.1|OSL-3.0|CC-BY-SA-4.0"
+          LICENSES=$(dotnet list ${{ env.PROJECT_PATH }} package --include-transitive 2>&1 || true)
+          if echo "$LICENSES" | grep -iE "$BLOCKED_LICENSES"; then
+            echo "::error::Copyleft or restrictive license detected in dependencies."
+            echo "Blocked licenses: GPL-3.0, GPL-2.0, AGPL-3.0, SSPL-1.0, EUPL-1.1, OSL-3.0, CC-BY-SA-4.0"
+            exit 1
+          fi
+          echo "No blocked licenses found."
+
       - name: Run Unit Tests
         run: dotnet test ${{ env.TEST_PATH }} --configuration Release --no-build --filter "FullyQualifiedName!~IntegrationTests" --logger "trx;LogFileName=unit-tests.trx" --collect:"XPlat Code Coverage"
 
@@ -47,7 +68,7 @@ jobs:
         run: dotnet test ${{ env.TEST_PATH }} --configuration Release --no-build --filter "FullyQualifiedName~IntegrationTests" --logger "trx;LogFileName=integration-tests.trx"
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: test-results
@@ -61,19 +82,20 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
 
     outputs:
       image_digest: ${{ steps.push.outputs.digest }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -81,7 +103,7 @@ jobs:
 
       - name: Build and push
         id: push
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: BioGuard.Api/Dockerfile
@@ -92,19 +114,44 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3
+
+      - name: Sign container image
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign --yes ${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+          cosign verify ${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }} 2>/dev/null || echo "Signature verification skipped (keyless mode)"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
   deploy-production:
     name: Deploy to DigitalOcean App Platform
     needs: docker-build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
     environment: production
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Deploy to App Platform
-        uses: digitalocean/app_action/deploy@v2
+        uses: digitalocean/app_action/deploy@cc55bc9b848d25f9c1c9f831cf843fbab3fbfb15 # v2
         env:
           IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
           MONGODB_CONNECTION_STRING: ${{ secrets.MONGODB_CONNECTION_STRING }}

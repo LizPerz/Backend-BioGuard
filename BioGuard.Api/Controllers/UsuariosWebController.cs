@@ -101,6 +101,7 @@ public class UsuariosWebController : ControllerBase
     /// MÓDULO 2: Subir foto de perfil (base64 o URL)
     /// </summary>
     [HttpPut("mi-perfil/foto")]
+    [RequestSizeLimit(1048576)]
     public async Task<IActionResult> SubirFoto([FromBody] SubirFotoRequest request)
     {
         var usuarioId = User.FindFirst("sub")?.Value;

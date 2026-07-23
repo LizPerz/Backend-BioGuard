@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
+using BioGuard.Api.Config;
 
 namespace BioGuard.Api.Controllers;
 
@@ -18,12 +19,16 @@ public class MedicamentosController : ControllerBase
 {
     private readonly MedicamentoService _medicamentoService;
     private readonly PacienteService _pacienteService;
+    private readonly IMongoDbContext _db;
+    private readonly AuditoriaService _auditoriaService;
     private readonly ILogger<MedicamentosController> _logger;
 
-    public MedicamentosController(MedicamentoService medicamentoService, PacienteService pacienteService, ILogger<MedicamentosController> logger)
+    public MedicamentosController(MedicamentoService medicamentoService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, ILogger<MedicamentosController> logger)
     {
         _medicamentoService = medicamentoService;
         _pacienteService = pacienteService;
+        _db = db;
+        _auditoriaService = auditoriaService;
         _logger = logger;
     }
 
@@ -109,6 +114,8 @@ public class MedicamentosController : ControllerBase
             request.Horario, request.Notas);
 
         _logger.LogInformation("Medication created successfully: {MedicamentoId}", medicamento.Id);
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(usuarioId, "crear", "medicamentos", medicamento.Id, ip);
         return Ok(new { MedicamentoId = medicamento.Id, message = "Medicamento creado" });
     }
 
@@ -243,13 +250,19 @@ public class MedicamentosController : ControllerBase
             return NotFound();
         }
         _logger.LogInformation("Medication deleted successfully: {MedicamentoId}", id);
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(usuarioId, "eliminar", "medicamentos", id, ip);
         return NoContent();
     }
 
     private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
     {
         if (role == "paciente") return pacienteId == userId;
-        if (role == "cuidador") return true;
+        if (role == "cuidador")
+        {
+            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
+            return cuidador != null;
+        }
 
         var paciente = await _pacienteService.GetByIdAsync(pacienteId);
         return paciente?.UsuarioWebId == userId;

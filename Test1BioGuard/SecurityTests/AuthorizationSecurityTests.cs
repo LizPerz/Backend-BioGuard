@@ -19,6 +19,7 @@ public class AuthorizationSecurityTests : IClassFixture<IntegrationTests.CustomW
     private readonly Mock<IMongoCollection<LecturaSensor>> _mockLecturas;
     private readonly Mock<IMongoCollection<EventoMetabolico>> _mockEventos;
     private readonly Mock<IMongoCollection<Plan>> _mockPlanes;
+    private readonly Mock<IMongoCollection<Cuidador>> _mockCuidadores;
 
     private const string PacienteAId = "111111111111111111111111";
     private const string PacienteBId = "222222222222222222222222";
@@ -37,6 +38,7 @@ public class AuthorizationSecurityTests : IClassFixture<IntegrationTests.CustomW
         _mockLecturas = new Mock<IMongoCollection<LecturaSensor>>();
         _mockEventos = new Mock<IMongoCollection<EventoMetabolico>>();
         _mockPlanes = new Mock<IMongoCollection<Plan>>();
+        _mockCuidadores = new Mock<IMongoCollection<Cuidador>>();
 
         _mockDb.Setup(db => db.Pacientes).Returns(_mockPacientes.Object);
         _mockDb.Setup(db => db.Medicamentos).Returns(_mockMedicamentos.Object);
@@ -44,6 +46,7 @@ public class AuthorizationSecurityTests : IClassFixture<IntegrationTests.CustomW
         _mockDb.Setup(db => db.LecturasSensores).Returns(_mockLecturas.Object);
         _mockDb.Setup(db => db.EventosMetabolicos).Returns(_mockEventos.Object);
         _mockDb.Setup(db => db.Planes).Returns(_mockPlanes.Object);
+        _mockDb.Setup(db => db.Cuidadores).Returns(_mockCuidadores.Object);
     }
 
     private void SetupFindToListAsyncEmpty<T>(Mock<IMongoCollection<T>> mockCollection)
@@ -121,6 +124,8 @@ public class AuthorizationSecurityTests : IClassFixture<IntegrationTests.CustomW
     public async Task IDOR_Medicamentos_CuidadorPuedeVerPacienteB_Retorna200()
     {
         SetupFindToListAsyncEmpty(_mockMedicamentos);
+        var cuidadorAsignado = new Cuidador { Id = "c1", UsuarioWebId = CuidadorId, PacienteId = PacienteBId, Nombre = "Cuidador Test" };
+        SetupFindFirstOrDefaultAsync(_mockCuidadores, cuidadorAsignado);
 
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
@@ -199,6 +204,8 @@ public class AuthorizationSecurityTests : IClassFixture<IntegrationTests.CustomW
     public async Task IDOR_Alertas_CuidadorPuedeVerPacienteB_Retorna200()
     {
         SetupFindToListAsyncEmpty(_mockAlertas);
+        var cuidadorAsignado = new Cuidador { Id = "c1", UsuarioWebId = CuidadorId, PacienteId = PacienteBId, Nombre = "Cuidador Test" };
+        SetupFindFirstOrDefaultAsync(_mockCuidadores, cuidadorAsignado);
 
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
@@ -311,6 +318,8 @@ public class AuthorizationSecurityTests : IClassFixture<IntegrationTests.CustomW
         SetupFindToListAsyncEmpty(_mockEventos);
         SetupFindToListAsyncEmpty(_mockAlertas);
         SetupFindToListAsyncEmpty(_mockMedicamentos);
+        var cuidadorAsignado = new Cuidador { Id = "c1", UsuarioWebId = CuidadorId, PacienteId = PacienteBId, Nombre = "Cuidador Test" };
+        SetupFindFirstOrDefaultAsync(_mockCuidadores, cuidadorAsignado);
 
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",

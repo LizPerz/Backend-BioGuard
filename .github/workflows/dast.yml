@@ -1,0 +1,79 @@
+name: BioGuard DAST Scan
+
+on:
+  workflow_run:
+    workflows: ["BioGuard CI/CD"]
+    types: [completed]
+    branches: [master]
+  schedule:
+    - cron: '0 8 * * 2'
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target API URL to scan'
+        required: false
+        default: 'https://bioguard-api-lkvnq.ondigitalocean.app'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+env:
+  DEFAULT_TARGET: 'https://bioguard-api-lkvnq.ondigitalocean.app'
+
+jobs:
+  zap-baseline:
+    name: OWASP ZAP Baseline Scan
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Determine target URL
+        id: target
+        run: |
+          URL="${{ github.event.inputs.target_url || env.DEFAULT_TARGET }}"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Scanning target: $URL"
+
+      - name: Wait for deployment
+        if: github.event_name == 'workflow_run'
+        run: sleep 30
+
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@8459dd041c0e88e3e4e0e7d15b1f39e5746e71e5 # v0.14.0
+        with:
+          target: ${{ steps.target.outputs.url }}
+          rules_file_name: '.github/zap-rules.tsv'
+          cmd_options: '-a'
+          allow_issue_writing: false
+          artifact_name: 'zap-baseline-report'
+
+      - name: ZAP API Scan
+        uses: zaproxy/action-api-scan@4b42751d5c1fc90b16c61bf0c4b2a92a3b9d35f1 # v0.8.0
+        with:
+          target: ${{ steps.target.outputs.url }}
+          format: openapi
+          cmd_options: '-a'
+          allow_issue_writing: false
+          artifact_name: 'zap-api-report'
+
+      - name: Upload ZAP reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: zap-reports
+          path: |
+            zap-baseline-report.*
+            zap-api-report.*
+          retention-days: 30

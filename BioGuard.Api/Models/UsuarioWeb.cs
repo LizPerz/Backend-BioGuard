@@ -46,6 +46,9 @@ public class UsuarioWeb
     [BsonElement("two_factor_verificado")]
     public bool TwoFactorVerificado { get; set; } = false;
 
+    [BsonElement("two_factor_habilitado")]
+    public bool TwoFactorHabilitado { get; set; } = false;
+
     [BsonElement("reset_password_token")]
     public string? ResetPasswordToken { get; set; }
 

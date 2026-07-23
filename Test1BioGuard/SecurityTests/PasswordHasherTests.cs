@@ -76,7 +76,7 @@ public class PasswordHasherTests
     {
         var hash = PasswordHasher.Hash("test");
 
-        hash.Should().StartWith("100000.");
+        hash.Should().StartWith("600000.");
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class PasswordHasherTests
         var hash = PasswordHasher.Hash("test");
         var parts = hash.Split('.');
 
-        int.Parse(parts[0]).Should().Be(100000);
+        int.Parse(parts[0]).Should().Be(600000);
         Convert.FromBase64String(parts[1]).Length.Should().Be(16);
         Convert.FromBase64String(parts[2]).Length.Should().Be(32);
     }

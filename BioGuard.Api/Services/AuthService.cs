@@ -125,6 +125,19 @@ public class AuthService
                     .Set(u => u.LockedUntil, null));
         }
 
+        if (user.TwoFactorHabilitado)
+        {
+            var codigo = RandomNumberString(6);
+            var expira = DateTime.UtcNow.AddMinutes(10);
+            var update2fa = Builders<UsuarioWeb>.Update
+                .Set(u => u.TwoFactorCode, codigo)
+                .Set(u => u.TwoFactorExpira, expira)
+                .Set(u => u.TwoFactorVerificado, false);
+            await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update2fa);
+            _logger.LogInformation("2FA required for user: {UserId}", user.Id);
+            return new AuthResponse("", user.Id, "", "", "", Requires2FA: true);
+        }
+
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
         var token = GenerateToken(user.Id, user.Correo, "dueno");
         _logger.LogInformation("User logged in successfully: {UserId}", user.Id);
@@ -202,7 +215,10 @@ public class AuthService
 
     public async Task<RefreshTokenResponse?> RefreshTokenAsync(RefreshTokenRequest request, string? ip = null)
     {
-        var stored = await _db.FindFirstOrDefaultAsync(_db.RefreshTokens, t => t.Token == request.RefreshToken);
+        var stored = await _db.FindFirstOrDefaultAsync(_db.RefreshTokens, t =>
+            CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(t.Token),
+                Encoding.UTF8.GetBytes(request.RefreshToken)));
         if (stored == null || !stored.IsActive)
         {
             _logger.LogWarning("Refresh token attempt with invalid or inactive token");
@@ -247,8 +263,12 @@ public class AuthService
     public async Task RevokeRefreshTokenAsync(RefreshToken token)
     {
         var filter = Builders<RefreshToken>.Filter.Where(t =>
-            t.Token == token.Token ||
-            (token.ReplacedBy != null && t.Token == token.ReplacedBy));
+            CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(t.Token),
+                Encoding.UTF8.GetBytes(token.Token)) ||
+            (token.ReplacedBy != null && CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(t.Token),
+                Encoding.UTF8.GetBytes(token.ReplacedBy))));
 
         var update = Builders<RefreshToken>.Update.Set(t => t.RevokedAt, DateTime.UtcNow);
 
@@ -436,6 +456,7 @@ public class AuthService
 
         var claims = new[]
         {
+            new Claim(JwtRegisteredClaimNames.Sub, id),
             new Claim(ClaimTypes.NameIdentifier, id),
             new Claim(ClaimTypes.Email, email),
             new Claim(ClaimTypes.Role, role),
@@ -529,7 +550,7 @@ public static class PasswordHasher
 {
     private const int SaltSize = 16;
     private const int KeySize = 32;
-    private const int Iterations = 100_000;
+    private const int Iterations = 600_000;
     private static readonly HashAlgorithmName Algorithm = HashAlgorithmName.SHA256;
 
     public static string Hash(string password)
