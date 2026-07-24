@@ -331,14 +331,14 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
     async Task SafeInsertOne<T>(IMongoCollection<T> col, T doc, string name)
     {
         try { await col.InsertOneAsync(doc); }
-        catch (MongoWriteException mwe) when (mwe.WriteError.Code == 11000)
+        catch (Exception ex) when (ex.Message.Contains("E11000"))
         { skipped.Add(name); }
     }
 
     async Task SafeInsertMany<T>(IMongoCollection<T> col, List<T> docs, string name)
     {
         try { await col.InsertManyAsync(docs); }
-        catch (MongoWriteException mwe) when (mwe.WriteError.Code == 11000)
+        catch (Exception ex) when (ex.Message.Contains("E11000"))
         { skipped.Add(name); }
     }
 
