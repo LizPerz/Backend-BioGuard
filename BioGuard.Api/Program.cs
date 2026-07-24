@@ -48,6 +48,7 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
+        ClockSkew = TimeSpan.FromSeconds(30),
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         ValidAudience = builder.Configuration["Jwt:Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
@@ -68,19 +69,32 @@ builder.Services.AddAuthentication(options =>
         },
         OnTokenValidated = async context =>
         {
-            var jti = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                      ?? context.Principal?.FindFirst("jti")?.Value;
-            if (!string.IsNullOrEmpty(jti))
+            try
             {
-                var scope = context.HttpContext.RequestServices.CreateScope();
-                var authService = scope.ServiceProvider.GetRequiredService<AuthService>();
-                if (await authService.IsTokenRevokedAsync(jti))
+                var jti = context.Principal?.FindFirst("jti")?.Value;
+                if (!string.IsNullOrEmpty(jti))
                 {
-                    context.Fail("Token has been revoked");
+                    var scope = context.HttpContext.RequestServices.CreateScope();
+                    var authService = scope.ServiceProvider.GetRequiredService<AuthService>();
+                    if (await authService.IsTokenRevokedAsync(jti))
+                    {
+                        context.Fail("Token has been revoked");
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                var logger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILogger<Program>>();
+                logger.LogWarning(ex, "Error during token validation (OnTokenValidated)");
             }
         }
     };
+});
+
+builder.Services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+{
+    options.MapInboundClaims = false;
 });
 
 builder.Services.AddAuthorization();
