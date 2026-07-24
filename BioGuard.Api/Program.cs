@@ -343,6 +343,9 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
             existingPlan = await db.FindFirstOrDefaultAsync(db.Planes, p => p.Nombre == "Gratis");
         }
 
+        var rnd = new Random(Guid.NewGuid().GetHashCode());
+        var macAddr = $"AA:BB:CC:{rnd.Next(0x10,0xFF):X2}:{rnd.Next(0x10,0xFF):X2}:{rnd.Next(0x10,0xFF):X2}";
+
         var testEmail = $"seed_{DateTime.UtcNow.Ticks}@bioguard.test";
         var existingUser = await db.FindFirstOrDefaultAsync(db.UsuariosWeb, u => u.Correo == testEmail);
         if (existingUser != null)
@@ -383,7 +386,6 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
         await db.Pacientes.InsertOneAsync(paciente);
         logger.LogInformation("Seed patient created: {PacienteId}", paciente.Id);
 
-        var rnd = new Random(42);
         var lecturas = new List<LecturaSensor>();
         for (int i = 0; i < 50; i++)
         {
@@ -391,7 +393,7 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
             var isPrePico = i % 10 == 0;
             lecturas.Add(new LecturaSensor
             {
-                Meta = new MetaData { PacienteId = paciente.Id, DispositivoMac = "AA:BB:CC:DD:EE:01" },
+                Meta = new MetaData { PacienteId = paciente.Id, DispositivoMac = macAddr },
                 Timestamp = ts,
                 PulsoBpm = isPrePico ? rnd.Next(100, 120) : rnd.Next(65, 95),
                 TemperaturaC = isPrePico ? 37.5 + rnd.NextDouble() * 0.8 : 36.2 + rnd.NextDouble() * 0.6,
@@ -425,9 +427,9 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
 
         await db.TrackingGps.InsertManyAsync(new List<TrackingGps>
         {
-            new() { Meta = new MetaData { PacienteId = paciente.Id, DispositivoMac = "AA:BB:CC:DD:EE:01" }, Timestamp = now.AddMinutes(-30), Ubicacion = new UbicacionGps { Coordinates = new[] { -99.1332, 19.4326 } }, EsEmergencia = false },
-            new() { Meta = new MetaData { PacienteId = paciente.Id, DispositivoMac = "AA:BB:CC:DD:EE:01" }, Timestamp = now.AddMinutes(-20), Ubicacion = new UbicacionGps { Coordinates = new[] { -99.1335, 19.4328 } }, EsEmergencia = false },
-            new() { Meta = new MetaData { PacienteId = paciente.Id, DispositivoMac = "AA:BB:CC:DD:EE:01" }, Timestamp = now.AddMinutes(-10), Ubicacion = new UbicacionGps { Coordinates = new[] { -99.1340, 19.4330 } }, EsEmergencia = true }
+            new() { Meta = new MetaData { PacienteId = paciente.Id, DispositivoMac = macAddr }, Timestamp = now.AddMinutes(-30), Ubicacion = new UbicacionGps { Coordinates = new[] { -99.1332, 19.4326 } }, EsEmergencia = false },
+            new() { Meta = new MetaData { PacienteId = paciente.Id, DispositivoMac = macAddr }, Timestamp = now.AddMinutes(-20), Ubicacion = new UbicacionGps { Coordinates = new[] { -99.1335, 19.4328 } }, EsEmergencia = false },
+            new() { Meta = new MetaData { PacienteId = paciente.Id, DispositivoMac = macAddr }, Timestamp = now.AddMinutes(-10), Ubicacion = new UbicacionGps { Coordinates = new[] { -99.1340, 19.4330 } }, EsEmergencia = true }
         });
 
         var medNames = new[] { ("Metformina", "500mg", "08:00,20:00"), ("Insulina", "10 unidades", "07:00,13:00,19:00"), ("Losartan", "50mg", "09:00") };
