@@ -482,6 +482,7 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
         await db.Pagos.InsertOneAsync(new Pago
         {
             UsuarioWebId = user.Id, Monto = 0, Moneda = "MXN", PlanId = existingPlan.Id,
+            StripeSessionId = $"cs_seed_{Guid.NewGuid():N}", StripeCustomerId = $"cus_seed_{Guid.NewGuid():N}",
             Estado = "completado", FechaPago = now.AddDays(-30), MetodoPago = "gratis"
         });
 
