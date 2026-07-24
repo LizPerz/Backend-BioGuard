@@ -460,7 +460,7 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
         await db.Dispositivos.InsertOneAsync(new Dispositivo
         {
             PacienteId = paciente.Id, NombreDispositivo = "BioGuard Watch Pro",
-            MacAddress = "AA:BB:CC:DD:EE:01", Conectado = true, FechaVinculacion = now.AddDays(-30)
+            MacAddress = macAddr, Conectado = true, FechaVinculacion = now.AddDays(-30)
         });
 
         var cuidadorUser = new UsuarioWeb
