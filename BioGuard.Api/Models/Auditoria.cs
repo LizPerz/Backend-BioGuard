@@ -10,7 +10,6 @@ public class Auditoria
     public string Id { get; set; } = string.Empty;
 
     [BsonElement("entidad_id")]
-    [BsonRepresentation(BsonType.ObjectId)]
     public string EntidadId { get; set; } = string.Empty;
 
     [BsonElement("accion")]
