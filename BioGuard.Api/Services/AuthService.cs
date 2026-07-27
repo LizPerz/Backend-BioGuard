@@ -22,12 +22,14 @@ public class AuthService
     private readonly string? _googleClientId;
     private readonly HttpClient _httpClient;
     private readonly ILogger<AuthService> _logger;
+    private readonly IEmailService _emailService;
 
-    public AuthService(IMongoDbContext db, IConfiguration config, HttpClient httpClient, ILogger<AuthService> logger)
+    public AuthService(IMongoDbContext db, IConfiguration config, HttpClient httpClient, ILogger<AuthService> logger, IEmailService emailService)
     {
         _db = db;
         _httpClient = httpClient;
         _logger = logger;
+        _emailService = emailService;
         _jwtKey = config["Jwt:Key"] is { Length: > 0 } k ? k
             : Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
             ?? throw new InvalidOperationException("JWT secret key not configured.");
@@ -64,6 +66,9 @@ public class AuthService
             return null;
         }
 
+        var verificationCode = RandomNumberString(6);
+        var codeExpiry = DateTime.UtcNow.AddMinutes(10);
+
         var user = new UsuarioWeb
         {
             Nombre = request.Nombre,
@@ -73,15 +78,20 @@ public class AuthService
             PasswordHash = PasswordHasher.Hash(request.Password),
             ProveedorAuth = "local",
             PlanId = plan.Id,
-            Activo = true,
+            Activo = false,
+            TwoFactorCode = verificationCode,
+            TwoFactorExpira = codeExpiry,
+            TwoFactorVerificado = false,
             FechaRegistro = DateTime.UtcNow
         };
 
         await _db.UsuariosWeb.InsertOneAsync(user);
-        var token = GenerateToken(user.Id, user.Correo, "dueno");
-        _logger.LogInformation("User registered successfully: {UserId}", user.Id);
 
-        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan.Nombre);
+        await _emailService.SendVerificationCodeAsync(user.Correo, $"{user.Nombre} {user.ApellidoPaterno}", verificationCode);
+
+        _logger.LogInformation("User registered (pending verification): {UserId}", user.Id);
+
+        return new AuthResponse("", user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan.Nombre, RequiresVerification: true);
     }
 
     // ── Login Web ──────────────────────────────────────────
@@ -280,9 +290,9 @@ public class AuthService
     public async Task<bool> Enviar2FAAsync(Enviar2FARequest request)
     {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
-        if (user == null || !user.Activo)
+        if (user == null)
         {
-            _logger.LogWarning("2FA send attempt for inactive or non-existent user: {Email}", request.Correo);
+            _logger.LogWarning("2FA send attempt for non-existent user: {Email}", request.Correo);
             return false;
         }
 
@@ -297,15 +307,17 @@ public class AuthService
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
         _logger.LogInformation("2FA code sent to user: {UserId}", user.Id);
 
+        await _emailService.SendVerificationCodeAsync(user.Correo, $"{user.Nombre} {user.ApellidoPaterno}", codigo);
+
         return true;
     }
 
     public async Task<AuthResponse?> Verificar2FAAsync(Verificar2FARequest request)
     {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
-        if (user == null || !user.Activo)
+        if (user == null)
         {
-            _logger.LogWarning("2FA verification attempt for inactive or non-existent user: {Email}", request.Correo);
+            _logger.LogWarning("2FA verification attempt for non-existent user: {Email}", request.Correo);
             return null;
         }
 
@@ -325,16 +337,19 @@ public class AuthService
             return null;
         }
 
+        var wasInactive = !user.Activo;
+
         var update = Builders<UsuarioWeb>.Update
             .Set(u => u.TwoFactorCode, null)
             .Set(u => u.TwoFactorExpira, null)
-            .Set(u => u.TwoFactorVerificado, true);
+            .Set(u => u.TwoFactorVerificado, true)
+            .Set(u => u.Activo, true);
 
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
 
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
         var token = GenerateToken(user.Id, user.Correo, "dueno");
-        _logger.LogInformation("2FA verified successfully for user: {UserId}", user.Id);
+        _logger.LogInformation("2FA verified successfully for user: {UserId} (activated={WasInactive})", user.Id, wasInactive);
 
         return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan?.Nombre ?? "Sin plan");
     }
@@ -359,6 +374,9 @@ public class AuthService
 
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
         _logger.LogInformation("Password reset token generated for user: {UserId}", user.Id);
+
+        var resetLink = $"https://bioguard.app/reset-password?token={Uri.EscapeDataString(token)}";
+        await _emailService.SendPasswordResetAsync(user.Correo, $"{user.Nombre} {user.ApellidoPaterno}", resetLink);
 
         return true;
     }

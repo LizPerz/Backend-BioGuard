@@ -24,7 +24,8 @@ public class RefreshTokenTests
 
         var mockDb = new Moq.Mock<BioGuard.Api.Config.IMongoDbContext>();
         var mockLogger = new Moq.Mock<ILogger<AuthService>>();
-        _service = new AuthService(mockDb.Object, config, new HttpClient(), mockLogger.Object);
+        var mockEmailService = new Moq.Mock<IEmailService>();
+        _service = new AuthService(mockDb.Object, config, new HttpClient(), mockLogger.Object, mockEmailService.Object);
     }
 
     [Fact]

@@ -6,6 +6,7 @@ using Moq;
 using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.Models;
+using BioGuard.Api.Services;
 
 namespace Test1BioGuard.IntegrationTests;
 
@@ -55,6 +56,15 @@ public class CustomWebApplicationFactory : WebApplicationFactory<BioGuard.Api.Pr
                 ConnectionString = "mongodb://localhost:27017",
                 DatabaseName = "bioguard_test"
             });
+
+            var mockEmailService = new Mock<IEmailService>();
+            mockEmailService.Setup(s => s.SendVerificationCodeAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+            mockEmailService.Setup(s => s.SendPasswordResetAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+            services.AddSingleton(mockEmailService.Object);
 
             services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
             {

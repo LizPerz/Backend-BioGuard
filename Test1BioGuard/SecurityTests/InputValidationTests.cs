@@ -20,7 +20,7 @@ public class InputValidationTests : IClassFixture<IntegrationTests.CustomWebAppl
     public async Task Register_CorreoInvalido_Retorna400()
     {
         var request = new RegisterWebRequest(
-            "Juan", "Perez", "Lopez", "correo-invalido", "Password123!", "Premium");
+            "Juan", "Perez", "correo-invalido", "Password123!", "Premium");
 
         var response = await _client.PostAsJsonAsync("/api/Auth/register", request);
 
@@ -31,7 +31,7 @@ public class InputValidationTests : IClassFixture<IntegrationTests.CustomWebAppl
     public async Task Register_PasswordCorta_Retorna400()
     {
         var request = new RegisterWebRequest(
-            "Juan", "Perez", "Lopez", "juan@test.com", "123", "Premium");
+            "Juan", "Perez", "juan@test.com", "123", "Premium");
 
         var response = await _client.PostAsJsonAsync("/api/Auth/register", request);
 
@@ -42,7 +42,7 @@ public class InputValidationTests : IClassFixture<IntegrationTests.CustomWebAppl
     public async Task Register_NombreVacio_Retorna400()
     {
         var request = new RegisterWebRequest(
-            "", "Perez", "Lopez", "juan@test.com", "Password123!", "Premium");
+            "", "Perez", "juan@test.com", "Password123!", "Premium");
 
         var response = await _client.PostAsJsonAsync("/api/Auth/register", request);
 

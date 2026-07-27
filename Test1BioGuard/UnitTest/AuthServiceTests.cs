@@ -43,7 +43,8 @@ public class AuthServiceTests
         }).Build();
 
         var mockLogger = new Mock<ILogger<AuthService>>();
-        _service = new AuthService(_mockDb.Object, config, new HttpClient(), mockLogger.Object);
+        var mockEmailService = new Mock<IEmailService>();
+        _service = new AuthService(_mockDb.Object, config, new HttpClient(), mockLogger.Object, mockEmailService.Object);
     }
 
     [Fact]
@@ -64,11 +65,11 @@ public class AuthServiceTests
             It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var request = new RegisterWebRequest("Juan", "Perez", "Lopez", "juan@test.com", "Password123!", "Premium");
+        var request = new RegisterWebRequest("Juan", "Perez", "juan@test.com", "Password123!", "Premium", "Lopez");
         var result = await _service.RegisterWebAsync(request);
 
         result.Should().NotBeNull();
-        result!.Token.Should().NotBeNullOrEmpty();
+        result!.RequiresVerification.Should().BeTrue();
         result.Rol.Should().Be("dueno");
         result.Plan.Should().Be("Premium");
     }
@@ -82,7 +83,7 @@ public class AuthServiceTests
                 It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
             .ReturnsAsync(existing);
 
-        var request = new RegisterWebRequest("Juan", "Perez", "Lopez", "juan@test.com", "Password123!", "Premium");
+        var request = new RegisterWebRequest("Juan", "Perez", "juan@test.com", "Password123!", "Premium", "Lopez");
         var result = await _service.RegisterWebAsync(request);
 
         result.Should().BeNull();
@@ -100,7 +101,7 @@ public class AuthServiceTests
                 It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
             .ReturnsAsync((Plan?)null);
 
-        var request = new RegisterWebRequest("Juan", "Perez", "Lopez", "juan@test.com", "Password123!", "Inexistente");
+        var request = new RegisterWebRequest("Juan", "Perez", "juan@test.com", "Password123!", "Inexistente", "Lopez");
         var result = await _service.RegisterWebAsync(request);
 
         result.Should().BeNull();

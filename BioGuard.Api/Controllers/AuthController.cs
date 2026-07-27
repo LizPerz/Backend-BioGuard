@@ -37,11 +37,15 @@ public class AuthController : ControllerBase
         if (result == null)
         {
             _logger.LogWarning("Register failed for email: {Correo} - email exists or invalid plan", request.Correo);
-            return BadRequest(new { message = "El correo ya existe o plan inválido" });
+            return BadRequest(new { message = "El correo ya existe, plan inválido o contraseña débil" });
         }
         _logger.LogInformation("Register successful for email: {Correo}", request.Correo);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         await _auditoriaService.RegistrarAsync(result.UserId, "registro", "usuarios_web", result.UserId, ip);
+        if (result.RequiresVerification)
+        {
+            return Ok(new { message = "Código de verificación enviado a tu correo", requiresVerification = true, userId = result.UserId, correo = request.Correo });
+        }
         return Ok(result);
     }
 

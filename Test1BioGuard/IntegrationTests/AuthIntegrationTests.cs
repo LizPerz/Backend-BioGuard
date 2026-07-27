@@ -49,15 +49,15 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
             .Returns(Task.CompletedTask);
 
         var request = new RegisterWebRequest(
-            "Juan", "Perez", "Lopez", "juan@test.com", "Password123!", "Premium");
+            "Juan", "Perez", "juan@test.com", "Password123!", "Premium", "Lopez");
 
         var response = await _client.PostAsJsonAsync("/api/Auth/register", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(json);
-        doc.RootElement.GetProperty("token").GetString().Should().NotBeNullOrEmpty();
-        doc.RootElement.GetProperty("rol").GetString().Should().Be("dueno");
+        doc.RootElement.GetProperty("requiresVerification").GetBoolean().Should().BeTrue();
+        doc.RootElement.GetProperty("message").GetString().Should().NotBeNullOrEmpty();
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
             .ReturnsAsync(existingUser);
 
         var request = new RegisterWebRequest(
-            "Juan", "Perez", "Lopez", "juan@test.com", "Password123!", "Premium");
+            "Juan", "Perez", "juan@test.com", "Password123!", "Premium", "Lopez");
 
         var response = await _client.PostAsJsonAsync("/api/Auth/register", request);
 
