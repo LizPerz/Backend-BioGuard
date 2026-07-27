@@ -184,6 +184,7 @@ builder.Services.AddScoped<AuditoriaService>();
 builder.Services.AddScoped<MedicamentoService>();
     builder.Services.AddScoped<AlertaService>();
     builder.Services.AddScoped<IEmailService, EmailService>();
+    builder.Services.AddScoped<OwnershipHelper>();
 
 // =============================================
 // CONTROLLERS + SWAGGER

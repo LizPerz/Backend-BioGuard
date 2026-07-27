@@ -86,6 +86,7 @@ public class PacienteService
         await _db.DeleteManyAsync(_db.Dispositivos, d => d.PacienteId == pacienteId);
         await _db.DeleteManyAsync(_db.Medicamentos, m => m.PacienteId == pacienteId);
         await _db.DeleteManyAsync(_db.Alertas, a => a.PacienteId == pacienteId);
+        await _db.DeleteManyAsync(_db.Cuidadores, c => c.PacienteId == pacienteId);
 
         var result = await _db.Pacientes.DeleteOneAsync(p => p.Id == pacienteId);
         if (result.DeletedCount == 0)
@@ -102,7 +103,7 @@ public class PacienteService
     private static string GenerarCodigo()
     {
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        return new string(Enumerable.Repeat(chars, 8) /*Aqui cambiar a 8*/
+        return new string(Enumerable.Repeat(chars, 8)
             .Select(s => s[System.Security.Cryptography.RandomNumberGenerator.GetInt32(s.Length)]).ToArray());
     }
 }

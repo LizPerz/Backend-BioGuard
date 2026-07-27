@@ -22,14 +22,16 @@ public class MedicamentosController : ControllerBase
     private readonly IMongoDbContext _db;
     private readonly AuditoriaService _auditoriaService;
     private readonly ILogger<MedicamentosController> _logger;
+    private readonly OwnershipHelper _ownershipHelper;
 
-    public MedicamentosController(MedicamentoService medicamentoService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, ILogger<MedicamentosController> logger)
+    public MedicamentosController(MedicamentoService medicamentoService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, ILogger<MedicamentosController> logger, OwnershipHelper ownershipHelper)
     {
         _medicamentoService = medicamentoService;
         _pacienteService = pacienteService;
         _db = db;
         _auditoriaService = auditoriaService;
         _logger = logger;
+        _ownershipHelper = ownershipHelper;
     }
 
     /// <summary>
@@ -42,7 +44,7 @@ public class MedicamentosController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching medications - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -74,7 +76,7 @@ public class MedicamentosController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(medicamento.PacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(medicamento.PacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching medication - user: {UserId}, paciente: {PacienteId}", usuarioId, medicamento.PacienteId);
             return Forbid();
@@ -131,7 +133,7 @@ public class MedicamentosController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(request.PacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(request.PacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed on ML trigger - user: {UserId}, paciente: {PacienteId}", usuarioId, request.PacienteId);
             return Forbid();
@@ -255,16 +257,4 @@ public class MedicamentosController : ControllerBase
         return NoContent();
     }
 
-    private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
-    {
-        if (role == "paciente") return pacienteId == userId;
-        if (role == "cuidador")
-        {
-            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
-            return cuidador != null;
-        }
-
-        var paciente = await _pacienteService.GetByIdAsync(pacienteId);
-        return paciente?.UsuarioWebId == userId;
-    }
 }

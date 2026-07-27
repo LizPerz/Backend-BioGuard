@@ -38,6 +38,9 @@ public class Alerta
 
     [BsonElement("fecha_atencion")]
     public DateTime? FechaAtencion { get; set; }
+
+    [BsonElement("accion_tomada")]
+    public string? AccionTomada { get; set; }
 }
 
 public class SensorData

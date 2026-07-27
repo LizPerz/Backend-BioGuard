@@ -23,6 +23,7 @@ public class ReportesController : ControllerBase
     private readonly PacienteService _pacienteService;
     private readonly IMongoDbContext _db;
     private readonly ILogger<ReportesController> _logger;
+    private readonly OwnershipHelper _ownershipHelper;
 
     public ReportesController(
         SensorService sensorService,
@@ -30,7 +31,8 @@ public class ReportesController : ControllerBase
         MedicamentoService medicamentoService,
         PacienteService pacienteService,
         IMongoDbContext db,
-        ILogger<ReportesController> logger)
+        ILogger<ReportesController> logger,
+        OwnershipHelper ownershipHelper)
     {
         _sensorService = sensorService;
         _alertaService = alertaService;
@@ -38,6 +40,7 @@ public class ReportesController : ControllerBase
         _pacienteService = pacienteService;
         _db = db;
         _logger = logger;
+        _ownershipHelper = ownershipHelper;
     }
 
     /// <summary>
@@ -51,7 +54,7 @@ public class ReportesController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching report summary - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -90,7 +93,7 @@ public class ReportesController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching alert history - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -114,7 +117,7 @@ public class ReportesController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching event history - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -138,7 +141,7 @@ public class ReportesController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching medication history - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -162,7 +165,7 @@ public class ReportesController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching reading history - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -182,16 +185,4 @@ public class ReportesController : ControllerBase
         return Ok(response);
     }
 
-    private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
-    {
-        if (role == "paciente") return pacienteId == userId;
-        if (role == "cuidador")
-        {
-            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
-            return cuidador != null;
-        }
-
-        var paciente = await _pacienteService.GetByIdAsync(pacienteId);
-        return paciente?.UsuarioWebId == userId;
-    }
 }

@@ -21,13 +21,15 @@ public class NotificacionesController : ControllerBase
     private readonly PacienteService _pacienteService;
     private readonly IMongoDbContext _db;
     private readonly ILogger<NotificacionesController> _logger;
+    private readonly OwnershipHelper _ownershipHelper;
 
-    public NotificacionesController(NotificacionService notificacionService, PacienteService pacienteService, IMongoDbContext db, ILogger<NotificacionesController> logger)
+    public NotificacionesController(NotificacionService notificacionService, PacienteService pacienteService, IMongoDbContext db, ILogger<NotificacionesController> logger, OwnershipHelper ownershipHelper)
     {
         _notificacionService = notificacionService;
         _pacienteService = pacienteService;
         _db = db;
         _logger = logger;
+        _ownershipHelper = ownershipHelper;
     }
 
     // ── Consulta ──────────────────────────────────────────────
@@ -60,7 +62,7 @@ public class NotificacionesController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(currentUserId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, currentUserId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, currentUserId, role!))
         {
             _logger.LogWarning("Ownership check failed for patient {PacienteId} requested by user {UsuarioId}", pacienteId, currentUserId);
             return Forbid();
@@ -161,18 +163,6 @@ public class NotificacionesController : ControllerBase
         return NoContent();
     }
 
-    private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
-    {
-        if (role == "paciente") return pacienteId == userId;
-        if (role == "cuidador")
-        {
-            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
-            return cuidador != null;
-        }
-
-        var paciente = await _pacienteService.GetByIdAsync(pacienteId);
-        return paciente?.UsuarioWebId == userId;
-    }
 }
 
 public record CrearNotificacionRequest(

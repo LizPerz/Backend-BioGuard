@@ -21,13 +21,15 @@ public class CuidadoresController : ControllerBase
     private readonly PacienteService _pacienteService;
     private readonly IMongoDbContext _db;
     private readonly ILogger<CuidadoresController> _logger;
+    private readonly OwnershipHelper _ownershipHelper;
 
-    public CuidadoresController(CuidadorService cuidadorService, PacienteService pacienteService, IMongoDbContext db, ILogger<CuidadoresController> logger)
+    public CuidadoresController(CuidadorService cuidadorService, PacienteService pacienteService, IMongoDbContext db, ILogger<CuidadoresController> logger, OwnershipHelper ownershipHelper)
     {
         _cuidadorService = cuidadorService;
         _pacienteService = pacienteService;
         _db = db;
         _logger = logger;
+        _ownershipHelper = ownershipHelper;
     }
 
     // ── Consulta ──────────────────────────────────────────────
@@ -111,7 +113,7 @@ public class CuidadoresController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching cuidadores by paciente - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -259,16 +261,4 @@ public class CuidadoresController : ControllerBase
         return Ok(new { CodigoAccesoQr = codigo, message = "QR regenerado" });
     }
 
-    private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
-    {
-        if (role == "paciente") return pacienteId == userId;
-        if (role == "cuidador")
-        {
-            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
-            return cuidador != null;
-        }
-
-        var paciente = await _pacienteService.GetByIdAsync(pacienteId);
-        return paciente?.UsuarioWebId == userId;
-    }
 }
