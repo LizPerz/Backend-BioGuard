@@ -7,10 +7,10 @@ namespace BioGuard.Api.DTOs;
 public record RegisterWebRequest(
     [Required] [StringLength(100)] string Nombre,
     [Required] [StringLength(100)] string ApellidoPaterno,
-    [StringLength(100)] string ApellidoMaterno,
     [Required] [EmailAddress] string Correo,
     [Required] [MinLength(8)] [StringLength(128)] string Password,
-    [Required] string PlanNombre);
+    [Required] string PlanNombre,
+    [StringLength(100)] string ApellidoMaterno = "");
 
 public record LoginWebRequest(
     [Required] [EmailAddress] string Correo,
@@ -22,7 +22,7 @@ public record LoginGoogleRequest(
 public record LoginCodigoRequest(
     [Required] [StringLength(50)] string CodigoAcceso);
 
-public record AuthResponse(string Token, string UserId, string Nombre, string Rol, string Plan, bool Requires2FA = false);
+public record AuthResponse(string Token, string UserId, string Nombre, string Rol, string Plan, bool Requires2FA = false, bool RequiresVerification = false);
 
 public record RefreshTokenRequest(
     [Required] string RefreshToken);
