@@ -32,17 +32,25 @@ public class AuditoriaController : ControllerBase
         [FromQuery] int pagina = 1,
         [FromQuery] int porPagina = 50)
     {
-        _logger.LogInformation("Listing audit logs, page {Pagina}, size {PorPagina}", pagina, porPagina);
-        var registros = await _auditoriaService.ObtenerAsync(pagina, porPagina);
-        var response = registros.Select(a => new
+        try
         {
-            a.Id,
-            a.Accion,
-            a.TablaAfectada,
-            a.RegistroId,
-            a.Fecha,
-            a.Ip
-        });
-        return Ok(response);
+            _logger.LogInformation("Listing audit logs, page {Pagina}, size {PorPagina}", pagina, porPagina);
+            var registros = await _auditoriaService.ObtenerAsync(pagina, porPagina);
+            var response = registros.Select(a => new
+            {
+                a.Id,
+                a.Accion,
+                a.TablaAfectada,
+                a.RegistroId,
+                a.Fecha,
+                a.Ip
+            });
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing audit logs");
+            return Ok(new List<object>());
+        }
     }
 }
