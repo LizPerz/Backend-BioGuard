@@ -22,7 +22,7 @@ public record LoginGoogleRequest(
 public record LoginCodigoRequest(
     [Required] [StringLength(50)] string CodigoAcceso);
 
-public record AuthResponse(string Token, string UserId, string Nombre, string Rol, string Plan, bool Requires2FA = false, bool RequiresVerification = false);
+public record AuthResponse(string Token, string UserId, string Nombre, string Rol, string Plan, bool Requires2FA = false, bool RequiresVerification = false, string? RefreshToken = null);
 
 public record RefreshTokenRequest(
     [Required] string RefreshToken);
@@ -95,8 +95,6 @@ public record EventoMetabolicoResponse(
 
 public record AtenderEventoRequest(
     [Required] string CuidadorId);
-public record AgregarAccionRequest(
-    [Required] [StringLength(500)] string Accion);
 
 public record TrackingGpsRequest(
     [Range(-180.0, 180.0)] double Longitud,
@@ -138,14 +136,6 @@ public record PagoResponse(
     DateTime FechaPago, string MetodoPago);
 
 // ── ML ────────────────────────────────────────────────────
-
-public record PrediccionResponse(
-    string Id, double Probabilidad, string NivelRiesgo,
-    string Recomendacion, DateTime FechaPrediccion);
-
-public record ModeloMlResponse(
-    string Id, string Nombre, string Tipo,
-    double Accuracy, bool Activo, DateTime FechaEntrenamiento);
 
 // ── Dispositivos ──────────────────────────────────────────
 

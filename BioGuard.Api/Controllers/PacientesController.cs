@@ -23,9 +23,10 @@ public class PacientesController : ControllerBase
     private readonly IMongoDbContext _db;
     private readonly AuditoriaService _auditoriaService;
     private readonly ILogger<PacientesController> _logger;
+    private readonly OwnershipHelper _ownershipHelper;
 
     public PacientesController(PacienteService pacienteService, SensorService sensorService,
-        DispositivoService dispositivoService, IMongoDbContext db, AuditoriaService auditoriaService, ILogger<PacientesController> logger)
+        DispositivoService dispositivoService, IMongoDbContext db, AuditoriaService auditoriaService, ILogger<PacientesController> logger, OwnershipHelper ownershipHelper)
     {
         _pacienteService = pacienteService;
         _sensorService = sensorService;
@@ -33,6 +34,7 @@ public class PacientesController : ControllerBase
         _db = db;
         _auditoriaService = auditoriaService;
         _logger = logger;
+        _ownershipHelper = ownershipHelper;
     }
 
     // ── Consulta ──────────────────────────────────────────────
@@ -72,7 +74,7 @@ public class PacientesController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(id, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed for user: {UserId}, paciente: {PacienteId}, role: {Role}", usuarioId, id, role);
             return Forbid();
@@ -148,7 +150,7 @@ public class PacientesController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(id, usuarioId, "dueno"))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(id, usuarioId, "dueno"))
         {
             _logger.LogWarning("Ownership check failed editing paciente - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
             return Forbid();
@@ -178,7 +180,7 @@ public class PacientesController : ControllerBase
         var usuarioId = User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(id, usuarioId, "dueno"))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(id, usuarioId, "dueno"))
         {
             _logger.LogWarning("Ownership check failed deleting paciente - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
             return Forbid();
@@ -210,7 +212,7 @@ public class PacientesController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(id, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed updating biometria - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
             return Forbid();
@@ -235,7 +237,7 @@ public class PacientesController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(id, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching QR - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
             return Forbid();
@@ -262,7 +264,7 @@ public class PacientesController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(id, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed regenerating QR - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
             return Forbid();
@@ -294,7 +296,7 @@ public class PacientesController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(id, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(id, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching device - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
             return Forbid();
@@ -313,16 +315,4 @@ public class PacientesController : ControllerBase
         });
     }
 
-    private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
-    {
-        if (role == "paciente") return pacienteId == userId;
-        if (role == "cuidador")
-        {
-            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
-            return cuidador != null;
-        }
-
-        var pacientes = await _pacienteService.GetAllByUsuarioAsync(userId);
-        return pacientes.Any(p => p.Id == pacienteId);
-    }
 }

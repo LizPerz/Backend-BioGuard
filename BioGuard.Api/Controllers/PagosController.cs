@@ -95,7 +95,8 @@ public class PagosController : ControllerBase
             pago.Moneda,
             pago.Estado,
             pago.FechaPago,
-            DescargaUrl = $"/api/pagos/{id}/recibo/descarga"
+            pago.MetodoPago,
+            Descripcion = $"BioGuard - Pago de ${pago.Monto} {pago.Moneda} ({pago.Estado})"
         });
     }
 

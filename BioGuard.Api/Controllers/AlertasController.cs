@@ -22,13 +22,15 @@ public class AlertasController : ControllerBase
     private readonly PacienteService _pacienteService;
     private readonly IMongoDbContext _db;
     private readonly ILogger<AlertasController> _logger;
+    private readonly OwnershipHelper _ownershipHelper;
 
-    public AlertasController(AlertaService alertaService, PacienteService pacienteService, IMongoDbContext db, ILogger<AlertasController> logger)
+    public AlertasController(AlertaService alertaService, PacienteService pacienteService, IMongoDbContext db, ILogger<AlertasController> logger, OwnershipHelper ownershipHelper)
     {
         _alertaService = alertaService;
         _pacienteService = pacienteService;
         _db = db;
         _logger = logger;
+        _ownershipHelper = ownershipHelper;
     }
 
     /// <summary>
@@ -41,7 +43,7 @@ public class AlertasController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching alerts - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -65,7 +67,7 @@ public class AlertasController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching pending alerts - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -97,7 +99,7 @@ public class AlertasController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(alerta.PacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(alerta.PacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching alert - user: {UserId}, paciente: {PacienteId}", usuarioId, alerta.PacienteId);
             return Forbid();
@@ -185,16 +187,4 @@ public class AlertasController : ControllerBase
         return NoContent();
     }
 
-    private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
-    {
-        if (role == "paciente") return pacienteId == userId;
-        if (role == "cuidador")
-        {
-            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
-            return cuidador != null;
-        }
-
-        var paciente = await _pacienteService.GetByIdAsync(pacienteId);
-        return paciente?.UsuarioWebId == userId;
-    }
 }

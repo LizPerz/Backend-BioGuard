@@ -150,9 +150,10 @@ public class AuthService
 
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
         var token = GenerateToken(user.Id, user.Correo, "dueno");
+        var refreshToken = await CreateAndStoreRefreshTokenAsync(user.Id);
         _logger.LogInformation("User logged in successfully: {UserId}", user.Id);
 
-        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan?.Nombre ?? "Sin plan");
+        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan?.Nombre ?? "Sin plan", RefreshToken: refreshToken);
     }
 
     // ── Login Google ───────────────────────────────────────
@@ -192,9 +193,10 @@ public class AuthService
 
         var userPlan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
         var token = GenerateToken(user.Id, user.Correo, "dueno");
+        var refreshToken = await CreateAndStoreRefreshTokenAsync(user.Id);
         _logger.LogInformation("Google login successful for user: {UserId}", user.Id);
 
-        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", userPlan?.Nombre ?? "Sin plan");
+        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", userPlan?.Nombre ?? "Sin plan", RefreshToken: refreshToken);
     }
 
     // ── Login por Código (Móvil) ───────────────────────────
@@ -205,16 +207,18 @@ public class AuthService
         if (paciente != null)
         {
             var token = GenerateToken(paciente.Id, paciente.CodigoAccesoQr, "paciente");
+            var refreshToken = await CreateAndStoreRefreshTokenAsync(paciente.Id);
             _logger.LogInformation("Patient login by code: {PacienteId}", paciente.Id);
-            return new AuthResponse(token, paciente.Id, paciente.Nombre, "paciente", "paciente");
+            return new AuthResponse(token, paciente.Id, paciente.Nombre, "paciente", "paciente", RefreshToken: refreshToken);
         }
 
         var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.CodigoAccesoQr == request.CodigoAcceso);
         if (cuidador != null)
         {
             var token = GenerateToken(cuidador.Id, cuidador.CodigoAccesoQr, "cuidador");
+            var refreshToken = await CreateAndStoreRefreshTokenAsync(cuidador.Id);
             _logger.LogInformation("Caregiver login by code: {CuidadorId}", cuidador.Id);
-            return new AuthResponse(token, cuidador.Id, cuidador.Nombre, "cuidador", "cuidador");
+            return new AuthResponse(token, cuidador.Id, cuidador.Nombre, "cuidador", "cuidador", RefreshToken: refreshToken);
         }
 
         _logger.LogWarning("Login by code failed: code not found");
@@ -349,9 +353,10 @@ public class AuthService
 
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
         var token = GenerateToken(user.Id, user.Correo, "dueno");
+        var refreshToken = await CreateAndStoreRefreshTokenAsync(user.Id);
         _logger.LogInformation("2FA verified successfully for user: {UserId} (activated={WasInactive})", user.Id, wasInactive);
 
-        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan?.Nombre ?? "Sin plan");
+        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan?.Nombre ?? "Sin plan", RefreshToken: refreshToken);
     }
 
     // ── Forgot Password ────────────────────────────────────
@@ -466,6 +471,19 @@ public class AuthService
     }
 
     // ── Helpers ────────────────────────────────────────────
+
+    private async Task<string> CreateAndStoreRefreshTokenAsync(string userId)
+    {
+        var refreshToken = GenerateRefreshToken();
+        await _db.RefreshTokens.InsertOneAsync(new RefreshToken
+        {
+            UsuarioId = userId,
+            Token = refreshToken,
+            ExpiresAt = DateTime.UtcNow.AddDays(_refreshTokenDays),
+        });
+        _logger.LogInformation("Refresh token created for user: {UserId}", userId);
+        return refreshToken;
+    }
 
     internal string GenerateToken(string id, string email, string role)
     {

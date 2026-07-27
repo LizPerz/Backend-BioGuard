@@ -62,7 +62,8 @@ public class AlertaService
         var update = Builders<Alerta>.Update
             .Set(a => a.Atendida, true)
             .Set(a => a.AtendidaPorId, cuidadorId)
-            .Set(a => a.FechaAtencion, DateTime.UtcNow);
+            .Set(a => a.FechaAtencion, DateTime.UtcNow)
+            .Set(a => a.AccionTomada, accionTomada);
 
         var result = await _db.Alertas.UpdateOneAsync(a => a.Id == alertaId, update);
         if (result.ModifiedCount == 0)

@@ -19,6 +19,8 @@ public class AuthServiceTests
     private readonly Mock<IMongoCollection<Paciente>> _mockPacientes;
     private readonly Mock<IMongoCollection<Cuidador>> _mockCuidadores;
 
+    private readonly Mock<IMongoCollection<RefreshToken>> _mockRefreshTokens;
+
     public AuthServiceTests()
     {
         Environment.SetEnvironmentVariable("JWT_SECRET_KEY", "BioGuard2024SecretKeyForJWTAuthentication!@#$%^&*()");
@@ -28,11 +30,19 @@ public class AuthServiceTests
         _mockPlanes = new Mock<IMongoCollection<Plan>>();
         _mockPacientes = new Mock<IMongoCollection<Paciente>>();
         _mockCuidadores = new Mock<IMongoCollection<Cuidador>>();
+        _mockRefreshTokens = new Mock<IMongoCollection<RefreshToken>>();
 
         _mockDb.Setup(db => db.UsuariosWeb).Returns(_mockUsuarios.Object);
         _mockDb.Setup(db => db.Planes).Returns(_mockPlanes.Object);
         _mockDb.Setup(db => db.Pacientes).Returns(_mockPacientes.Object);
         _mockDb.Setup(db => db.Cuidadores).Returns(_mockCuidadores.Object);
+        _mockDb.Setup(db => db.RefreshTokens).Returns(_mockRefreshTokens.Object);
+
+        _mockRefreshTokens.Setup(c => c.InsertOneAsync(
+            It.IsAny<RefreshToken>(),
+            It.IsAny<InsertOneOptions>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {

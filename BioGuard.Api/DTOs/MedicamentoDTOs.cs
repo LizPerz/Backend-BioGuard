@@ -19,6 +19,3 @@ public record ActualizarMedicamentoRequest(
     [Required] [StringLength(200)] string Dosis,
     [Required] [StringLength(200)] string Horario,
     [StringLength(500)] string? Notas);
-
-public record RegistrarTomaRequest(
-    [Required] string MedicamentoId);

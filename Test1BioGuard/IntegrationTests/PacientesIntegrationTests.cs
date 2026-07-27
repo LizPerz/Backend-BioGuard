@@ -20,6 +20,9 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
     private readonly Mock<IMongoCollection<TrackingGps>> _mockTracking;
     private readonly Mock<IMongoCollection<Notificacion>> _mockNotificaciones;
     private readonly Mock<IMongoCollection<Dispositivo>> _mockDispositivos;
+    private readonly Mock<IMongoCollection<Medicamento>> _mockMedicamentos;
+    private readonly Mock<IMongoCollection<Alerta>> _mockAlertas;
+    private readonly Mock<IMongoCollection<Cuidador>> _mockCuidadores;
 
     public PacientesIntegrationTests(CustomWebApplicationFactory factory)
     {
@@ -32,6 +35,9 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
         _mockTracking = new Mock<IMongoCollection<TrackingGps>>();
         _mockNotificaciones = new Mock<IMongoCollection<Notificacion>>();
         _mockDispositivos = new Mock<IMongoCollection<Dispositivo>>();
+        _mockMedicamentos = new Mock<IMongoCollection<Medicamento>>();
+        _mockAlertas = new Mock<IMongoCollection<Alerta>>();
+        _mockCuidadores = new Mock<IMongoCollection<Cuidador>>();
 
         _mockDb.Setup(db => db.Pacientes).Returns(_mockPacientes.Object);
         _mockDb.Setup(db => db.LecturasSensores).Returns(_mockLecturas.Object);
@@ -39,6 +45,9 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
         _mockDb.Setup(db => db.TrackingGps).Returns(_mockTracking.Object);
         _mockDb.Setup(db => db.Notificaciones).Returns(_mockNotificaciones.Object);
         _mockDb.Setup(db => db.Dispositivos).Returns(_mockDispositivos.Object);
+        _mockDb.Setup(db => db.Medicamentos).Returns(_mockMedicamentos.Object);
+        _mockDb.Setup(db => db.Alertas).Returns(_mockAlertas.Object);
+        _mockDb.Setup(db => db.Cuidadores).Returns(_mockCuidadores.Object);
 
         _mockDb.Setup(db => db.FindToListAsync(
                 It.IsAny<IMongoCollection<Paciente>>(),
@@ -115,6 +124,11 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
     {
         var pacienteId = "123456789012345678901234";
 
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = pacienteId, UsuarioWebId = "user123" });
+
         var mockDeleteResult = new Mock<DeleteResult>();
         mockDeleteResult.Setup(r => r.DeletedCount).Returns(1);
 
@@ -132,6 +146,15 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
             .ReturnsAsync(mockDeleteResult.Object);
         _mockDb.Setup(db => db.DeleteManyAsync(It.IsAny<IMongoCollection<Dispositivo>>(),
             It.IsAny<System.Linq.Expressions.Expression<Func<Dispositivo, bool>>>()))
+            .ReturnsAsync(mockDeleteResult.Object);
+        _mockDb.Setup(db => db.DeleteManyAsync(It.IsAny<IMongoCollection<Medicamento>>(),
+            It.IsAny<System.Linq.Expressions.Expression<Func<Medicamento, bool>>>()))
+            .ReturnsAsync(mockDeleteResult.Object);
+        _mockDb.Setup(db => db.DeleteManyAsync(It.IsAny<IMongoCollection<Alerta>>(),
+            It.IsAny<System.Linq.Expressions.Expression<Func<Alerta, bool>>>()))
+            .ReturnsAsync(mockDeleteResult.Object);
+        _mockDb.Setup(db => db.DeleteManyAsync(It.IsAny<IMongoCollection<Cuidador>>(),
+            It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
             .ReturnsAsync(mockDeleteResult.Object);
         _mockPacientes.Setup(c => c.DeleteOneAsync(
             It.IsAny<FilterDefinition<Paciente>>(),
@@ -175,7 +198,8 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
         {
             Id = pacienteId,
             CodigoAccesoQr = "XYZ98765",
-            Nombre = "Paciente QR"
+            Nombre = "Paciente QR",
+            UsuarioWebId = "user123"
         };
 
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(

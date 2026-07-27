@@ -643,8 +643,8 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
         var response = await _client.GetAsync($"/api/Sensores/lecturas/{pacienteId}/exportar-pdf");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var json = await response.Content.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(json);
-        doc.RootElement.GetProperty("message").GetString().Should().Contain("PDF generado");
+        var csv = await response.Content.ReadAsStringAsync();
+        csv.Should().Contain("Timestamp,PulsoBpm,TemperaturaC,SudoracionGsr,ProbabilidadPico");
+        csv.Should().Contain("75");
     }
 }

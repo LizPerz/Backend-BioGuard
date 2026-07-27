@@ -22,14 +22,16 @@ public class SensoresController : ControllerBase
     private readonly IMongoDbContext _db;
     private readonly AuditoriaService _auditoriaService;
     private readonly ILogger<SensoresController> _logger;
+    private readonly OwnershipHelper _ownershipHelper;
 
-    public SensoresController(SensorService sensorService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, ILogger<SensoresController> logger)
+    public SensoresController(SensorService sensorService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, ILogger<SensoresController> logger, OwnershipHelper ownershipHelper)
     {
         _sensorService = sensorService;
         _pacienteService = pacienteService;
         _db = db;
         _auditoriaService = auditoriaService;
         _logger = logger;
+        _ownershipHelper = ownershipHelper;
     }
 
     // ── Lecturas (Envío de datos) ─────────────────────────────
@@ -93,7 +95,7 @@ public class SensoresController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching readings - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -125,7 +127,7 @@ public class SensoresController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching readings range - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -158,7 +160,7 @@ public class SensoresController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching stats - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -196,7 +198,7 @@ public class SensoresController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching trend - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -252,7 +254,7 @@ public class SensoresController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching events - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -277,7 +279,7 @@ public class SensoresController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching event summary - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -328,7 +330,7 @@ public class SensoresController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed exporting PDF - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -336,7 +338,16 @@ public class SensoresController : ControllerBase
 
         _logger.LogInformation("Exporting PDF for paciente: {PacienteId}", pacienteId);
         var lecturas = await _sensorService.ObtenerLecturasAsync(pacienteId, 1000);
-        return Ok(new { message = $"PDF generado con {lecturas.Count} registros", DescargaUrl = $"/api/sensores/lecturas/{pacienteId}/exportar-pdf/descarga" });
+
+        var csv = new System.Text.StringBuilder();
+        csv.AppendLine("Timestamp,PulsoBpm,TemperaturaC,SudoracionGsr,ProbabilidadPico");
+        foreach (var l in lecturas)
+        {
+            csv.AppendLine($"{l.Timestamp:O},{l.PulsoBpm},{l.TemperaturaC},{l.SudoracionGsr},{l.ProbabilidadPico}");
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(csv.ToString());
+        return File(bytes, "text/csv", $"lecturas_{pacienteId}_{DateTime.UtcNow:yyyyMMdd}.csv");
     }
 
     // ── Tracking GPS ──────────────────────────────────────────
@@ -390,7 +401,7 @@ public class SensoresController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching current tracking - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -423,7 +434,7 @@ public class SensoresController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (!await VerifyPacienteOwnership(pacienteId, usuarioId, role!))
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
         {
             _logger.LogWarning("Ownership check failed fetching GPS route - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
             return Forbid();
@@ -437,18 +448,6 @@ public class SensoresController : ControllerBase
             p.Timestamp,
             p.EsEmergencia));
         return Ok(response);
-    }
-    private async Task<bool> VerifyPacienteOwnership(string pacienteId, string userId, string role)
-    {
-        if (role == "paciente") return pacienteId == userId;
-        if (role == "cuidador")
-        {
-            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.UsuarioWebId == userId && c.PacienteId == pacienteId);
-            return cuidador != null;
-        }
-
-        var paciente = await _pacienteService.GetByIdAsync(pacienteId);
-        return paciente?.UsuarioWebId == userId;
     }
 }
 
