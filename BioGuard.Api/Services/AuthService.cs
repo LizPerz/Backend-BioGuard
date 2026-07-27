@@ -230,9 +230,7 @@ public class AuthService
     public async Task<RefreshTokenResponse?> RefreshTokenAsync(RefreshTokenRequest request, string? ip = null)
     {
         var stored = await _db.FindFirstOrDefaultAsync(_db.RefreshTokens, t =>
-            CryptographicOperations.FixedTimeEquals(
-                Encoding.UTF8.GetBytes(t.Token),
-                Encoding.UTF8.GetBytes(request.RefreshToken)));
+            t.Token == request.RefreshToken);
         if (stored == null || !stored.IsActive)
         {
             _logger.LogWarning("Refresh token attempt with invalid or inactive token");
@@ -277,12 +275,8 @@ public class AuthService
     public async Task RevokeRefreshTokenAsync(RefreshToken token)
     {
         var filter = Builders<RefreshToken>.Filter.Where(t =>
-            CryptographicOperations.FixedTimeEquals(
-                Encoding.UTF8.GetBytes(t.Token),
-                Encoding.UTF8.GetBytes(token.Token)) ||
-            (token.ReplacedBy != null && CryptographicOperations.FixedTimeEquals(
-                Encoding.UTF8.GetBytes(t.Token),
-                Encoding.UTF8.GetBytes(token.ReplacedBy))));
+            t.Token == token.Token ||
+            (token.ReplacedBy != null && t.Token == token.ReplacedBy));
 
         var update = Builders<RefreshToken>.Update.Set(t => t.RevokedAt, DateTime.UtcNow);
 
