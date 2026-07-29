@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -5,6 +6,8 @@ using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Config;
+using BioGuard.Api.Models;
+using MongoDB.Driver;
 
 namespace BioGuard.Api.Controllers;
 
@@ -99,6 +102,48 @@ public class NotificacionesController : ControllerBase
         return Ok(response);
     }
 
+    // ── FCM ──────────────────────────────────────────────
+
+    /// <summary>
+    /// POST /api/Notificaciones/fcm [MÓVIL]
+    /// Registrar token FCM para notificaciones push
+    /// </summary>
+    [HttpPost("fcm")]
+    public async Task<IActionResult> RegistrarFcm([FromBody] RegistrarFcmRequest request)
+    {
+        var usuarioId = User.FindFirst("sub")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        _logger.LogInformation("Registering FCM token for user {UsuarioId}, platform: {Plataforma}", usuarioId, request.Plataforma);
+
+        var existing = await _db.FindFirstOrDefaultAsync(_db.FcmTokens, t => t.UsuarioId == usuarioId && t.Rol == role);
+        if (existing != null)
+        {
+            var update = Builders<FcmToken>.Update
+                .Set(t => t.Token, request.Token)
+                .Set(t => t.Plataforma, request.Plataforma)
+                .Set(t => t.Activo, true);
+            await _db.FcmTokens.UpdateOneAsync(t => t.Id == existing.Id, update);
+        }
+        else
+        {
+            var fcm = new FcmToken
+            {
+                UsuarioId = usuarioId,
+                Rol = role ?? "",
+                Token = request.Token,
+                Plataforma = request.Plataforma,
+                Activo = true,
+                FechaRegistro = DateTime.UtcNow
+            };
+            await _db.FcmTokens.InsertOneAsync(fcm);
+        }
+
+        _logger.LogInformation("FCM token registered for user {UsuarioId}", usuarioId);
+        return Ok(new { message = "Token FCM registrado" });
+    }
+
     // ── Gestión ───────────────────────────────────────────────
 
     /// <summary>
@@ -168,3 +213,7 @@ public class NotificacionesController : ControllerBase
 public record CrearNotificacionRequest(
     string PacienteId, string Titulo, string Mensaje, string Tipo,
     string? CuidadorId = null, string? UsuarioWebId = null);
+
+public record RegistrarFcmRequest(
+    [Required] string Token,
+    [Required] [StringLength(50)] string Plataforma);

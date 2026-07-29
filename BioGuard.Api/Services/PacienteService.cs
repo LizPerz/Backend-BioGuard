@@ -100,6 +100,15 @@ public class PacienteService
         return result.DeletedCount > 0;
     }
 
+    public async Task<string> RegenerarQRAsync(string pacienteId)
+    {
+        var codigo = GenerarCodigo();
+        var update = Builders<Paciente>.Update.Set(p => p.CodigoAccesoQr, codigo);
+        await _db.Pacientes.UpdateOneAsync(p => p.Id == pacienteId, update);
+        _logger.LogInformation("QR regenerated for patient: {PacienteId}", pacienteId);
+        return codigo;
+    }
+
     private static string GenerarCodigo()
     {
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
