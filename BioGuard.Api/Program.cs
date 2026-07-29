@@ -494,6 +494,43 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
     }
 });
 
+// =============================================
+// MIGRATE BCrypt → PBKDF2 passwords
+// =============================================
+app.MapPost("/api/Seed/migrate-passwords", async (IMongoDbContext db, ILogger<Program> logger) =>
+{
+    var affected = new List<string>();
+    var batch = new List<WriteModel<UsuarioWeb>>();
+    var newPassword = "SeedTest@123!";
+    var newHash = PasswordHasher.Hash(newPassword);
+
+    var cursor = await db.UsuariosWeb.FindAsync(FilterDefinition<UsuarioWeb>.Empty);
+    var users = await cursor.ToListAsync();
+
+    foreach (var user in users)
+    {
+        var parts = user.PasswordHash.Split('.', 3);
+        bool isPbkdf2 = parts.Length == 3 && int.TryParse(parts[0], out _);
+        if (isPbkdf2) continue;
+
+        batch.Add(new UpdateOneModel<UsuarioWeb>(
+            Builders<UsuarioWeb>.Filter.Eq(u => u.Id, user.Id),
+            Builders<UsuarioWeb>.Update.Set(u => u.PasswordHash, newHash)));
+        affected.Add($"{user.Correo} ({user.Id})");
+    }
+
+    if (batch.Count > 0)
+        await db.UsuariosWeb.BulkWriteAsync(batch);
+
+    logger.LogInformation("Migrated {Count} BCrypt users to PBKDF2", affected.Count);
+    return Results.Ok(new
+    {
+        message = $"Migrated {affected.Count} users",
+        newPassword,
+        affected
+    });
+});
+
 app.Run();
 
 static async Task CreateTtlIndex<T>(IMongoCollection<T> collection, string fieldName, int expirationSeconds)
