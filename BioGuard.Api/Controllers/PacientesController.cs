@@ -271,14 +271,7 @@ public class PacientesController : ControllerBase
         }
 
         _logger.LogInformation("Regenerating QR for paciente: {PacienteId}", id);
-        var paciente = await _pacienteService.GetByIdAsync(id);
-        if (paciente == null)
-        {
-            _logger.LogWarning("Paciente not found for QR regen: {PacienteId}", id);
-            return NotFound();
-        }
-
-        var codigo = await _pacienteService.CrearPacienteAsync(paciente.UsuarioWebId, paciente.Nombre);
+        var codigo = await _pacienteService.RegenerarQRAsync(id);
         _logger.LogInformation("QR regenerated for paciente: {PacienteId}", id);
         return Ok(new { CodigoAccesoQr = codigo, message = "QR regenerado" });
     }

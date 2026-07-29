@@ -31,6 +31,11 @@ public class CuidadorService
         return await _db.FindToListAsync(_db.Cuidadores, c => c.PacienteId == pacienteId);
     }
 
+    public async Task<Cuidador?> ObtenerPorCodigoAsync(string codigo)
+    {
+        return await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.CodigoAccesoQr == codigo);
+    }
+
     public async Task<int> ContarPorPacienteAsync(string pacienteId)
     {
         return (int)await _db.CountDocumentsAsync(_db.Cuidadores, c => c.PacienteId == pacienteId);

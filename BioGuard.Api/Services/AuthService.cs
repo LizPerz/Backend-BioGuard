@@ -206,7 +206,7 @@ public class AuthService
         var paciente = await _db.FindFirstOrDefaultAsync(_db.Pacientes, p => p.CodigoAccesoQr == request.CodigoAcceso);
         if (paciente != null)
         {
-            var token = GenerateToken(paciente.Id, paciente.CodigoAccesoQr, "paciente");
+            var token = GenerateToken(paciente.Id, paciente.CodigoAccesoQr, "paciente", pacienteId: paciente.Id);
             var refreshToken = await CreateAndStoreRefreshTokenAsync(paciente.Id);
             _logger.LogInformation("Patient login by code: {PacienteId}", paciente.Id);
             return new AuthResponse(token, paciente.Id, paciente.Nombre, "paciente", "paciente", RefreshToken: refreshToken);
@@ -479,19 +479,24 @@ public class AuthService
         return refreshToken;
     }
 
-    internal string GenerateToken(string id, string email, string role)
+    internal string GenerateToken(string id, string email, string role, string? pacienteId = null)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claimsList = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, id),
-            new Claim(ClaimTypes.NameIdentifier, id),
-            new Claim(ClaimTypes.Email, email),
-            new Claim(ClaimTypes.Role, role),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new(JwtRegisteredClaimNames.Sub, id),
+            new(ClaimTypes.NameIdentifier, id),
+            new(ClaimTypes.Email, email),
+            new(ClaimTypes.Role, role),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+
+        if (!string.IsNullOrEmpty(pacienteId))
+            claimsList.Add(new Claim("paciente_id", pacienteId));
+
+        var claims = claimsList.ToArray();
 
         var token = new JwtSecurityToken(
             issuer: _issuer,

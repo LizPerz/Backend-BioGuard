@@ -20,6 +20,10 @@ public class Cuidador
     [BsonElement("codigo_acceso_qr")]
     public string CodigoAccesoQr { get; set; } = string.Empty;
 
+    [BsonElement("usuario_vinculado_id")]
+    [BsonRepresentation(BsonType.ObjectId)]
+    public string UsuarioVinculadoId { get; set; } = string.Empty;
+
     [BsonElement("nombre")]
     public string Nombre { get; set; } = string.Empty;
 

@@ -82,6 +82,12 @@ public record ActualizarCuidadorRequest(
     [Required] [StringLength(200)] string Nombre,
     [Required] [StringLength(100)] string Parentesco);
 
+public record VincularCuidadorRequest(
+    [Required] [StringLength(50)] string CodigoAcceso,
+    [Required] [StringLength(100)] string Nombre,
+    [Required] [EmailAddress] string Correo,
+    [Required] [MinLength(8)] [StringLength(128)] string Password);
+
 // ── Sensores ──────────────────────────────────────────────
 
 public record LecturaSensorRequest(

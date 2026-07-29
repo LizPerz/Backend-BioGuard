@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -5,6 +6,8 @@ using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Config;
+using BioGuard.Api.Models;
+using MongoDB.Driver;
 
 namespace BioGuard.Api.Controllers;
 
@@ -259,6 +262,68 @@ public class CuidadoresController : ControllerBase
         var codigo = await _cuidadorService.RegenerarQRAsync(id);
         _logger.LogInformation("QR regenerated for cuidador: {CuidadorId}", id);
         return Ok(new { CodigoAccesoQr = codigo, message = "QR regenerado" });
+    }
+
+    // ── Auto-vinculación (App Móvil) ──────────────────────────
+
+    /// <summary>
+    /// POST /api/Cuidadores/vincular [MÓVIL]
+    /// MÓDULO 4: Cuidador se auto-registra con el código QR
+    /// Crea cuenta de usuario y vincula al paciente
+    /// </summary>
+    [HttpPost("vincular")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Vincular([FromBody] VincularCuidadorRequest request)
+    {
+        _logger.LogInformation("Self-registration attempt with care code: {Codigo}", request.CodigoAcceso);
+
+        var cuidador = await _cuidadorService.ObtenerPorCodigoAsync(request.CodigoAcceso);
+        if (cuidador == null)
+        {
+            _logger.LogWarning("Self-registration failed - code not found: {Codigo}", request.CodigoAcceso);
+            return NotFound(new { message = "Código de cuidador no encontrado" });
+        }
+
+        if (!string.IsNullOrEmpty(cuidador.UsuarioVinculadoId))
+        {
+            _logger.LogWarning("Self-registration failed - code already used: {Codigo}", request.CodigoAcceso);
+            return BadRequest(new { message = "Este código ya fue utilizado" });
+        }
+
+        var existingUser = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
+        if (existingUser != null)
+        {
+            _logger.LogWarning("Self-registration failed - email already exists: {Email}", request.Correo);
+            return BadRequest(new { message = "El correo ya está registrado" });
+        }
+
+        var (passwordValid, passwordError) = PasswordHasher.ValidateComplexity(request.Password);
+        if (!passwordValid)
+        {
+            _logger.LogWarning("Self-registration with weak password: {Error}", passwordError);
+            return BadRequest(new { message = passwordError });
+        }
+
+        var planGratis = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Nombre == "Gratis");
+        var user = new UsuarioWeb
+        {
+            Nombre = request.Nombre,
+            Correo = request.Correo,
+            PasswordHash = PasswordHasher.Hash(request.Password),
+            ProveedorAuth = "local",
+            PlanId = planGratis?.Id ?? "",
+            Activo = true,
+            FechaRegistro = DateTime.UtcNow,
+            TwoFactorHabilitado = false,
+            FailedLoginAttempts = 0
+        };
+        await _db.UsuariosWeb.InsertOneAsync(user);
+
+        var update = Builders<Cuidador>.Update.Set(c => c.UsuarioVinculadoId, user.Id);
+        await _db.Cuidadores.UpdateOneAsync(c => c.Id == cuidador.Id, update);
+
+        _logger.LogInformation("Caregiver self-registered: {UsuarioId} linked to cuidador {CuidadorId}", user.Id, cuidador.Id);
+        return Ok(new { message = "Cuenta creada. Ahora puedes iniciar sesión con tu correo y contraseña." });
     }
 
 }
