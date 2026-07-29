@@ -1,9 +1,12 @@
+using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Models;
+using BioGuard.Api.Config;
 
 namespace BioGuard.Api.Controllers;
 
@@ -17,11 +20,13 @@ namespace BioGuard.Api.Controllers;
 public class MLController : ControllerBase
 {
     private readonly MLService _mlService;
+    private readonly OwnershipHelper _ownershipHelper;
     private readonly ILogger<MLController> _logger;
 
-    public MLController(MLService mlService, ILogger<MLController> logger)
+    public MLController(MLService mlService, OwnershipHelper ownershipHelper, ILogger<MLController> logger)
     {
         _mlService = mlService;
+        _ownershipHelper = ownershipHelper;
         _logger = logger;
     }
 
@@ -34,6 +39,16 @@ public class MLController : ControllerBase
     [HttpGet("predicciones/{pacienteId}")]
     public async Task<IActionResult> ObtenerPredicciones(string pacienteId)
     {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching predictions - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
+            return Forbid();
+        }
+
         _logger.LogInformation("Getting ML predictions for patient {PacienteId}", pacienteId);
         var predicciones = await _mlService.ObtenerPrediccionesAsync(pacienteId);
         var response = predicciones.Select(p => new
@@ -56,6 +71,16 @@ public class MLController : ControllerBase
     [HttpGet("predicciones/{pacienteId}/actual")]
     public async Task<IActionResult> PrediccionActual(string pacienteId)
     {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching current prediction - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
+            return Forbid();
+        }
+
         _logger.LogInformation("Getting current ML prediction for patient {PacienteId}", pacienteId);
         var prediccion = await _mlService.ObtenerPrediccionActualAsync(pacienteId);
         if (prediccion == null)
@@ -83,6 +108,16 @@ public class MLController : ControllerBase
     [HttpGet("recomendaciones/{pacienteId}")]
     public async Task<IActionResult> Recomendaciones(string pacienteId)
     {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching recommendations - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
+            return Forbid();
+        }
+
         _logger.LogInformation("Getting recommendations for patient {PacienteId}", pacienteId);
         var recomendaciones = await _mlService.ObtenerRecomendacionesAsync(pacienteId);
         return Ok(new { Recomendaciones = recomendaciones });
@@ -169,6 +204,16 @@ public class MLController : ControllerBase
     [HttpPost("diagnosticar")]
     public async Task<IActionResult> Diagnosticar([FromBody] DiagnosticarRequest request)
     {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(request.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed during diagnosis - user: {UserId}, paciente: {PacienteId}", usuarioId, request.PacienteId);
+            return Forbid();
+        }
+
         _logger.LogInformation("Running ML diagnosis for patient {PacienteId}", request.PacienteId);
         var predicciones = await _mlService.ObtenerPrediccionesAsync(request.PacienteId);
         var prediccion = predicciones.FirstOrDefault();
@@ -219,6 +264,9 @@ public class MLController : ControllerBase
     }
 }
 
-public record EntrenarModeloRequest(string Version, string Descripcion);
+public record EntrenarModeloRequest(
+    [Required][StringLength(50)] string Version,
+    [Required][StringLength(500)] string Descripcion);
 
-public record DiagnosticarRequest(string PacienteId);
+public record DiagnosticarRequest(
+    [Required] string PacienteId);

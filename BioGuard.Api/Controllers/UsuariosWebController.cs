@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -33,7 +34,7 @@ public class UsuariosWebController : ControllerBase
     [HttpGet("mi-perfil")]
     public async Task<IActionResult> MiPerfil()
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Getting profile for user {UsuarioId}", usuarioId);
@@ -63,7 +64,7 @@ public class UsuariosWebController : ControllerBase
     [HttpPut("mi-perfil")]
     public async Task<IActionResult> EditarPerfil([FromBody] UpdatePerfilRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Updating profile for user {UsuarioId}", usuarioId);
@@ -83,7 +84,7 @@ public class UsuariosWebController : ControllerBase
     [HttpPut("mi-perfil/correo")]
     public async Task<IActionResult> CambiarCorreo([FromBody] CambiarCorreoRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Changing email for user {UsuarioId}", usuarioId);
@@ -104,7 +105,7 @@ public class UsuariosWebController : ControllerBase
     [RequestSizeLimit(1048576)]
     public async Task<IActionResult> SubirFoto([FromBody] SubirFotoRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Uploading photo for user {UsuarioId}", usuarioId);
@@ -126,7 +127,7 @@ public class UsuariosWebController : ControllerBase
     [HttpGet("mi-plan")]
     public async Task<IActionResult> MiPlan()
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Getting plan for user {UsuarioId}", usuarioId);
@@ -150,7 +151,7 @@ public class UsuariosWebController : ControllerBase
     [HttpPut("cambiar-plan")]
     public async Task<IActionResult> CambiarPlan([FromBody] CambiarPlanRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Changing plan to {PlanNombre} for user {UsuarioId}", request.PlanNombre, usuarioId);
@@ -197,7 +198,7 @@ public class UsuariosWebController : ControllerBase
     [HttpDelete("mi-cuenta")]
     public async Task<IActionResult> EliminarCuenta()
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Deleting account for user {UsuarioId}", usuarioId);

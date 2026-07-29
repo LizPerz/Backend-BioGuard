@@ -44,7 +44,7 @@ public class NotificacionesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Listar()
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Listing notifications for user {UsuarioId}", usuarioId);
@@ -61,7 +61,7 @@ public class NotificacionesController : ControllerBase
     [HttpGet("by-paciente/{pacienteId}")]
     public async Task<IActionResult> ObtenerPorPaciente(string pacienteId)
     {
-        var currentUserId = User.FindFirst("sub")?.Value;
+        var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(currentUserId)) return Unauthorized();
 
@@ -85,11 +85,11 @@ public class NotificacionesController : ControllerBase
     [HttpGet("by-usuario/{usuarioId}")]
     public async Task<IActionResult> ObtenerPorUsuario(string usuarioId)
     {
-        var currentUserId = User.FindFirst("sub")?.Value;
+        var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(currentUserId)) return Unauthorized();
 
-        if (role == "dueno" && currentUserId != usuarioId)
+        if (currentUserId != usuarioId)
         {
             _logger.LogWarning("User {UsuarioId} attempted to access notifications of user {TargetUsuarioId} without permission", currentUserId, usuarioId);
             return Forbid();
@@ -111,7 +111,7 @@ public class NotificacionesController : ControllerBase
     [HttpPost("fcm")]
     public async Task<IActionResult> RegistrarFcm([FromBody] RegistrarFcmRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -153,13 +153,25 @@ public class NotificacionesController : ControllerBase
     [HttpPut("{id}/leer")]
     public async Task<IActionResult> MarcarLeida(string id)
     {
-        _logger.LogInformation("Marking notification {Id} as read", id);
-        var result = await _notificacionService.MarcarLeidaAsync(id);
-        if (!result)
+        var notificacion = await _db.FindFirstOrDefaultAsync(_db.Notificaciones, n => n.Id == id);
+        if (notificacion == null)
         {
             _logger.LogWarning("Notification {Id} not found when marking as read", id);
             return NotFound();
         }
+
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(notificacion.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed marking notification as read - user: {UserId}, notification: {Id}", usuarioId, id);
+            return Forbid();
+        }
+
+        _logger.LogInformation("Marking notification {Id} as read", id);
+        await _notificacionService.MarcarLeidaAsync(id);
         return Ok(new { message = "Notificación marcada como leída" });
     }
 
@@ -173,13 +185,13 @@ public class NotificacionesController : ControllerBase
     [Authorize(Roles = "dueno,paciente")]
     public async Task<IActionResult> Crear([FromBody] CrearNotificacionRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        if (role == "paciente" && usuarioId != request.PacienteId)
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(request.PacienteId, usuarioId, role!))
         {
-            _logger.LogWarning("Patient {UsuarioId} attempted to create notification for different patient {PacienteId}", usuarioId, request.PacienteId);
+            _logger.LogWarning("Ownership check failed creating notification - user: {UserId}, paciente: {PacienteId}", usuarioId, request.PacienteId);
             return Forbid();
         }
 
@@ -198,20 +210,35 @@ public class NotificacionesController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Eliminar(string id)
     {
-        _logger.LogInformation("Deleting notification {Id}", id);
-        var result = await _notificacionService.EliminarAsync(id);
-        if (!result)
+        var notificacion = await _db.FindFirstOrDefaultAsync(_db.Notificaciones, n => n.Id == id);
+        if (notificacion == null)
         {
             _logger.LogWarning("Notification {Id} not found when attempting to delete", id);
             return NotFound();
         }
+
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(notificacion.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed deleting notification - user: {UserId}, notification: {Id}", usuarioId, id);
+            return Forbid();
+        }
+
+        _logger.LogInformation("Deleting notification {Id}", id);
+        await _notificacionService.EliminarAsync(id);
         return NoContent();
     }
 
 }
 
 public record CrearNotificacionRequest(
-    string PacienteId, string Titulo, string Mensaje, string Tipo,
+    [Required] string PacienteId,
+    [Required][StringLength(200)] string Titulo,
+    [Required][StringLength(2000)] string Mensaje,
+    [Required][StringLength(50)] string Tipo,
     string? CuidadorId = null, string? UsuarioWebId = null);
 
 public record RegistrarFcmRequest(

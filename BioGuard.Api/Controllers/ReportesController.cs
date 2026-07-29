@@ -50,7 +50,7 @@ public class ReportesController : ControllerBase
     [HttpGet("resumen/{pacienteId}")]
     public async Task<IActionResult> Resumen(string pacienteId)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -89,7 +89,7 @@ public class ReportesController : ControllerBase
     [HttpGet("historial-alertas/{pacienteId}")]
     public async Task<IActionResult> HistorialAlertas(string pacienteId, [FromQuery] int limite = 100)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -113,7 +113,7 @@ public class ReportesController : ControllerBase
     [HttpGet("historial-eventos/{pacienteId}")]
     public async Task<IActionResult> HistorialEventos(string pacienteId, [FromQuery] int limite = 100)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -137,7 +137,7 @@ public class ReportesController : ControllerBase
     [HttpGet("historial-medicamentos/{pacienteId}")]
     public async Task<IActionResult> HistorialMedicamentos(string pacienteId)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -161,7 +161,7 @@ public class ReportesController : ControllerBase
     public async Task<IActionResult> HistorialLecturas(
         string pacienteId, [FromQuery] int limite = 500)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 

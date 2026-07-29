@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -33,7 +34,7 @@ public class PagosController : ControllerBase
     [HttpPost("crear-sesion")]
     public async Task<IActionResult> CrearSesion([FromBody] CrearSesionPagoRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Creating payment session for user {UsuarioId}, plan {PlanNombre}", usuarioId, request.PlanNombre);
@@ -63,7 +64,7 @@ public class PagosController : ControllerBase
     [HttpGet("historial")]
     public async Task<IActionResult> Historial()
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Getting payment history for user {UsuarioId}", usuarioId);
@@ -80,12 +81,21 @@ public class PagosController : ControllerBase
     [HttpGet("{id}/recibo")]
     public async Task<IActionResult> Recibo(string id)
     {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
         _logger.LogInformation("Getting receipt for payment {Id}", id);
         var pago = await _pagosService.ObtenerPorIdAsync(id);
         if (pago == null)
         {
             _logger.LogWarning("Payment {Id} not found when getting receipt", id);
             return NotFound();
+        }
+
+        if (pago.UsuarioWebId != usuarioId)
+        {
+            _logger.LogWarning("User {UsuarioId} attempted to access receipt of payment {PaymentId} belonging to user {PaymentOwner}", usuarioId, id, pago.UsuarioWebId);
+            return Forbid();
         }
 
         return Ok(new
@@ -109,7 +119,7 @@ public class PagosController : ControllerBase
     [HttpPost("cancelar")]
     public async Task<IActionResult> Cancelar()
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Cancelling subscription for user {UsuarioId}", usuarioId);

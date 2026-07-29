@@ -56,6 +56,11 @@ public class DispositivoService
         return await _db.FindFirstOrDefaultAsync(_db.Dispositivos, d => d.PacienteId == pacienteId);
     }
 
+    public async Task<Dispositivo?> ObtenerPorIdAsync(string id)
+    {
+        return await _db.FindFirstOrDefaultAsync(_db.Dispositivos, d => d.Id == id);
+    }
+
     public async Task<bool> ActualizarAsync(string id, string nombre)
     {
         _logger.LogInformation("Actualizando dispositivo {DispositivoId}", id);

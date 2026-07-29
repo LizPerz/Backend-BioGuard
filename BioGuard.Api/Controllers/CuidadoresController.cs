@@ -44,7 +44,7 @@ public class CuidadoresController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Listar()
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Listing cuidadores for user: {UserId}", usuarioId);
@@ -61,7 +61,7 @@ public class CuidadoresController : ControllerBase
     [HttpGet("disponibles")]
     public async Task<IActionResult> Disponibles()
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Checking available slots for user: {UserId}", usuarioId);
@@ -84,7 +84,7 @@ public class CuidadoresController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Fetching cuidador by ID: {CuidadorId}", id);
@@ -112,7 +112,7 @@ public class CuidadoresController : ControllerBase
     [HttpGet("by-paciente/{pacienteId}")]
     public async Task<IActionResult> GetByPaciente(string pacienteId)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -138,8 +138,15 @@ public class CuidadoresController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Crear([FromBody] CrearCuidadorRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(request.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed creating cuidador - user: {UserId}, paciente: {PacienteId}", usuarioId, request.PacienteId);
+            return Forbid();
+        }
 
         var count = await _cuidadorService.ContarPorPacienteAsync(request.PacienteId);
         if (count >= 3)
@@ -165,7 +172,7 @@ public class CuidadoresController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Editar(string id, [FromBody] ActualizarCuidadorRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Editing cuidador: {CuidadorId}", id);
@@ -199,7 +206,7 @@ public class CuidadoresController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Eliminar(string id)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Deleting cuidador: {CuidadorId}", id);
@@ -275,18 +282,18 @@ public class CuidadoresController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Vincular([FromBody] VincularCuidadorRequest request)
     {
-        _logger.LogInformation("Self-registration attempt with care code: {Codigo}", request.CodigoAcceso);
+        _logger.LogInformation("Self-registration attempt received");
 
         var cuidador = await _cuidadorService.ObtenerPorCodigoAsync(request.CodigoAcceso);
         if (cuidador == null)
         {
-            _logger.LogWarning("Self-registration failed - code not found: {Codigo}", request.CodigoAcceso);
+            _logger.LogWarning("Self-registration failed - code not found");
             return NotFound(new { message = "Código de cuidador no encontrado" });
         }
 
         if (!string.IsNullOrEmpty(cuidador.UsuarioVinculadoId))
         {
-            _logger.LogWarning("Self-registration failed - code already used: {Codigo}", request.CodigoAcceso);
+            _logger.LogWarning("Self-registration failed - code already used");
             return BadRequest(new { message = "Este código ya fue utilizado" });
         }
 
@@ -300,7 +307,7 @@ public class CuidadoresController : ControllerBase
         var (passwordValid, passwordError) = PasswordHasher.ValidateComplexity(request.Password);
         if (!passwordValid)
         {
-            _logger.LogWarning("Self-registration with weak password: {Error}", passwordError);
+            _logger.LogWarning("Self-registration password validation failed");
             return BadRequest(new { message = passwordError });
         }
 

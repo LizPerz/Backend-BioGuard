@@ -95,11 +95,11 @@ public class AuthController : ControllerBase
     [HttpPost("login-codigo")]
     public async Task<IActionResult> LoginByCodigo([FromBody] LoginCodigoRequest request)
     {
-        _logger.LogInformation("Login by codigo attempt for code: {CodigoAcceso}", request.CodigoAcceso);
+        _logger.LogInformation("Login by codigo attempt received");
         var result = await _authService.LoginByCodigoAsync(request);
         if (result == null)
         {
-            _logger.LogWarning("Login by codigo failed - code not found: {CodigoAcceso}", request.CodigoAcceso);
+            _logger.LogWarning("Login by codigo failed - code not found");
             return NotFound(new { message = "Código no encontrado" });
         }
         _logger.LogInformation("Login by codigo successful");

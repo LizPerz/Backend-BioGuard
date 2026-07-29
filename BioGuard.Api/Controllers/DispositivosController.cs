@@ -1,9 +1,11 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
+using BioGuard.Api.Config;
 
 namespace BioGuard.Api.Controllers;
 
@@ -17,11 +19,13 @@ namespace BioGuard.Api.Controllers;
 public class DispositivosController : ControllerBase
 {
     private readonly DispositivoService _dispositivoService;
+    private readonly OwnershipHelper _ownershipHelper;
     private readonly ILogger<DispositivosController> _logger;
 
-    public DispositivosController(DispositivoService dispositivoService, ILogger<DispositivosController> logger)
+    public DispositivosController(DispositivoService dispositivoService, OwnershipHelper ownershipHelper, ILogger<DispositivosController> logger)
     {
         _dispositivoService = dispositivoService;
+        _ownershipHelper = ownershipHelper;
         _logger = logger;
     }
 
@@ -72,6 +76,16 @@ public class DispositivosController : ControllerBase
     [HttpGet("{pacienteId}")]
     public async Task<IActionResult> ObtenerPorPaciente(string pacienteId)
     {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed getting device - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
+            return Forbid();
+        }
+
         _logger.LogInformation("Getting device for patient {PacienteId}", pacienteId);
         var dispositivo = await _dispositivoService.ObtenerPorPacienteAsync(pacienteId);
         if (dispositivo == null) return Ok(new { Vinculado = false });
@@ -80,7 +94,7 @@ public class DispositivosController : ControllerBase
         {
             Vinculado = true,
             dispositivo.NombreDispositivo,
-            dispositivo.MacAddress,
+            MacAddress = "XX:XX:XX:XX:XX:XX",
             dispositivo.Conectado,
             dispositivo.FechaVinculacion
         });
@@ -93,8 +107,18 @@ public class DispositivosController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Actualizar(string id, [FromBody] ActualizarDispositivoRequest request)
     {
-        var pacienteId = User.FindFirst("paciente_id")?.Value;
-        if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        var dispositivo = await _dispositivoService.ObtenerPorIdAsync(id);
+        if (dispositivo == null) return NotFound();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(dispositivo.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed updating device - user: {UserId}, device: {DeviceId}", usuarioId, id);
+            return Forbid();
+        }
 
         _logger.LogInformation("Updating device {Id} name", id);
         var result = await _dispositivoService.ActualizarAsync(id, request.Nombre);
@@ -113,8 +137,18 @@ public class DispositivosController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Desvincular(string id)
     {
-        var pacienteId = User.FindFirst("paciente_id")?.Value;
-        if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        var dispositivo = await _dispositivoService.ObtenerPorIdAsync(id);
+        if (dispositivo == null) return NotFound();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(dispositivo.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed unlinking device - user: {UserId}, device: {DeviceId}", usuarioId, id);
+            return Forbid();
+        }
 
         _logger.LogInformation("Unlinking device {Id}", id);
         var result = await _dispositivoService.EliminarAsync(id);

@@ -40,7 +40,7 @@ public class MedicamentosController : ControllerBase
     [HttpGet("by-paciente/{pacienteId}")]
     public async Task<IActionResult> ObtenerPorPaciente(string pacienteId)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -72,7 +72,7 @@ public class MedicamentosController : ControllerBase
             return NotFound();
         }
 
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -95,7 +95,7 @@ public class MedicamentosController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Crear([FromBody] CrearMedicamentoRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         var paciente = await _pacienteService.GetByIdAsync(request.PacienteId);
@@ -129,7 +129,7 @@ public class MedicamentosController : ControllerBase
     [Authorize(Roles = "dueno,paciente")]
     public async Task<IActionResult> TriggerMedicamento([FromBody] CrearMedicamentoRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -163,7 +163,7 @@ public class MedicamentosController : ControllerBase
             return NotFound();
         }
 
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         var paciente = await _pacienteService.GetByIdAsync(medicamento.PacienteId);
@@ -191,11 +191,28 @@ public class MedicamentosController : ControllerBase
     [HttpPut("{id}/toma")]
     public async Task<IActionResult> RegistrarToma(string id)
     {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        var medicamento = await _medicamentoService.ObtenerPorIdAsync(id);
+        if (medicamento == null)
+        {
+            _logger.LogWarning("Medication not found for intake registration: {MedicamentoId}", id);
+            return NotFound();
+        }
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(medicamento.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed registering intake - user: {UserId}, medicamento: {MedicamentoId}", usuarioId, id);
+            return Forbid();
+        }
+
         _logger.LogInformation("Registering medication intake: {MedicamentoId}", id);
         var result = await _medicamentoService.RegistrarTomaAsync(id);
         if (!result)
         {
-            _logger.LogWarning("Medication not found for intake registration: {MedicamentoId}", id);
+            _logger.LogWarning("Medication intake registration failed: {MedicamentoId}", id);
             return NotFound();
         }
         _logger.LogInformation("Medication intake registered: {MedicamentoId}", id);
@@ -209,11 +226,28 @@ public class MedicamentosController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> CambiarActivo(string id, [FromBody] bool activo)
     {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        var medicamento = await _medicamentoService.ObtenerPorIdAsync(id);
+        if (medicamento == null)
+        {
+            _logger.LogWarning("Medication not found for status change: {MedicamentoId}", id);
+            return NotFound();
+        }
+
+        var paciente = await _pacienteService.GetByIdAsync(medicamento.PacienteId);
+        if (paciente?.UsuarioWebId != usuarioId)
+        {
+            _logger.LogWarning("Ownership check failed changing medication status - user: {UserId}, medicamento: {MedicamentoId}", usuarioId, id);
+            return Forbid();
+        }
+
         _logger.LogInformation("Changing medication active status: {MedicamentoId}, active: {Activo}", id, activo);
         var result = await _medicamentoService.ActivarAsync(id, activo);
         if (!result)
         {
-            _logger.LogWarning("Medication not found for status change: {MedicamentoId}", id);
+            _logger.LogWarning("Medication status change failed: {MedicamentoId}", id);
             return NotFound();
         }
         _logger.LogInformation("Medication active status changed: {MedicamentoId}, active: {Activo}", id, activo);
@@ -235,7 +269,7 @@ public class MedicamentosController : ControllerBase
             return NotFound();
         }
 
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         var paciente = await _pacienteService.GetByIdAsync(medicamento.PacienteId);
