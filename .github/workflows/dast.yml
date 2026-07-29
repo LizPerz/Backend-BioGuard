@@ -51,7 +51,7 @@ jobs:
         run: sleep 30
 
       - name: ZAP Baseline Scan
-        uses: zaproxy/action-baseline@8459dd041c0e88e3e4e0e7d15b1f39e5746e71e5 # v0.14.0
+        uses: zaproxy/action-baseline@6c5a007541891231cd9e0ddec25d4f25c59c9874 # v0.15.0
         with:
           target: ${{ steps.target.outputs.url }}
           rules_file_name: '.github/zap-rules.tsv'
@@ -60,7 +60,7 @@ jobs:
           artifact_name: 'zap-baseline-report'
 
       - name: ZAP API Scan
-        uses: zaproxy/action-api-scan@4b42751d5c1fc90b16c61bf0c4b2a92a3b9d35f1 # v0.8.0
+        uses: zaproxy/action-api-scan@bd24b11e76da11ab60302c8ae87f091cbb11f034 # v0.10.0
         with:
           target: ${{ steps.target.outputs.url }}
           format: openapi
