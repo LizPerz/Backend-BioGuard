@@ -39,7 +39,7 @@ public class AlertasController : ControllerBase
     [HttpGet("by-paciente/{pacienteId}")]
     public async Task<IActionResult> ObtenerPorPaciente(string pacienteId, [FromQuery] int limite = 50)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -63,7 +63,7 @@ public class AlertasController : ControllerBase
     [HttpGet("pendientes/{pacienteId}")]
     public async Task<IActionResult> ObtenerPendientes(string pacienteId)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -95,7 +95,7 @@ public class AlertasController : ControllerBase
             return NotFound();
         }
 
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -118,6 +118,16 @@ public class AlertasController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Crear([FromBody] CrearAlertaRequest request)
     {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(request.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed creating alert - user: {UserId}, paciente: {PacienteId}", usuarioId, request.PacienteId);
+            return Forbid();
+        }
+
         _logger.LogInformation("Creating alert for paciente: {PacienteId}, type: {Tipo}, level: {Nivel}", request.PacienteId, request.Tipo, request.Nivel);
         var sensorData = new SensorData
         {
@@ -141,11 +151,28 @@ public class AlertasController : ControllerBase
     [HttpPut("{id}/resolver")]
     public async Task<IActionResult> Resolver(string id, [FromBody] ResolverAlertaRequest request)
     {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        var alerta = await _alertaService.ObtenerPorIdAsync(id);
+        if (alerta == null)
+        {
+            _logger.LogWarning("Alert not found for resolution: {AlertaId}", id);
+            return NotFound();
+        }
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(alerta.PacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed resolving alert - user: {UserId}, paciente: {PacienteId}", usuarioId, alerta.PacienteId);
+            return Forbid();
+        }
+
         _logger.LogInformation("Resolving alert: {AlertaId}, cuidador: {CuidadorId}", id, request.CuidadorId);
         var result = await _alertaService.ResolverAsync(id, request.CuidadorId, request.AccionTomada);
         if (!result)
         {
-            _logger.LogWarning("Alert not found for resolution: {AlertaId}", id);
+            _logger.LogWarning("Alert resolution failed: {AlertaId}", id);
             return NotFound();
         }
         _logger.LogInformation("Alert resolved successfully: {AlertaId}", id);
@@ -167,7 +194,7 @@ public class AlertasController : ControllerBase
             return NotFound();
         }
 
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         var paciente = await _pacienteService.GetByIdAsync(alerta.PacienteId);

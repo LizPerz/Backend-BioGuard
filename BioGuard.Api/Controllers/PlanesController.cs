@@ -219,13 +219,13 @@ public class PlanesController : ControllerBase
 }
 
 public record CrearPlanRequest(
-    [Required] string Nombre,
-    [Required] decimal Precio,
-    string PrecioMoneda = "MXN",
-    int LimitePacientes = 1,
-    int LimiteCuidadores = 0,
-    int DiasHistorial = 30,
+    [Required][StringLength(100)] string Nombre,
+    [Required][Range(0, 10000)] decimal Precio,
+    [StringLength(3)] string PrecioMoneda = "MXN",
+    [Range(0, 100)] int LimitePacientes = 1,
+    [Range(0, 100)] int LimiteCuidadores = 0,
+    [Range(1, 365)] int DiasHistorial = 30,
     bool GpsContinuo = false,
     bool AiConsole = false,
-    [Required] string Descripcion = "",
+    [StringLength(500)] string Descripcion = "",
     int Orden = 1);

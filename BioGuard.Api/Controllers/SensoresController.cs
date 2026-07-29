@@ -51,7 +51,7 @@ public class SensoresController : ControllerBase
             pacienteId, "wearos-001", request.PulsoBpm, request.TemperaturaC,
             request.SudoracionGsr, 0.0);
 
-        var usuarioId = User.FindFirst("sub")?.Value ?? "unknown";
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         await _auditoriaService.RegistrarAsync(usuarioId, "insertar_lectura", "lecturas_sensores", lectura.Id, ip);
 
@@ -91,7 +91,7 @@ public class SensoresController : ControllerBase
     [HttpGet("lecturas/{pacienteId}")]
     public async Task<IActionResult> ObtenerLecturas(string pacienteId, [FromQuery] int limite = 100)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -123,7 +123,7 @@ public class SensoresController : ControllerBase
     public async Task<IActionResult> ObtenerLecturasRango(
         string pacienteId, [FromQuery] DateTime desde, [FromQuery] DateTime hasta)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -156,7 +156,7 @@ public class SensoresController : ControllerBase
     [HttpGet("estadisticas/{pacienteId}")]
     public async Task<IActionResult> Estadisticas(string pacienteId)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -194,7 +194,7 @@ public class SensoresController : ControllerBase
     [HttpGet("estadisticas/{pacienteId}/tendencia")]
     public async Task<IActionResult> Tendencia(string pacienteId, [FromQuery] string periodo = "diario")
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -250,7 +250,7 @@ public class SensoresController : ControllerBase
     [HttpGet("eventos/{pacienteId}")]
     public async Task<IActionResult> ObtenerEventos(string pacienteId, [FromQuery] int limite = 50)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -275,7 +275,7 @@ public class SensoresController : ControllerBase
     [HttpGet("eventos/{pacienteId}/resumen")]
     public async Task<IActionResult> ResumenEventos(string pacienteId)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -304,7 +304,7 @@ public class SensoresController : ControllerBase
     [HttpPut("eventos/{eventoId}/atender")]
     public async Task<IActionResult> AtenderEvento(string eventoId, [FromBody] AtenderEventoRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Marking event as attended: {EventoId}, cuidador: {CuidadorId}", eventoId, request.CuidadorId);
@@ -326,7 +326,7 @@ public class SensoresController : ControllerBase
     [HttpGet("lecturas/{pacienteId}/exportar-pdf")]
     public async Task<IActionResult> ExportarPDF(string pacienteId)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -397,7 +397,7 @@ public class SensoresController : ControllerBase
     [HttpGet("tracking/{pacienteId}/actual")]
     public async Task<IActionResult> TrackingActual(string pacienteId)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -430,7 +430,7 @@ public class SensoresController : ControllerBase
     public async Task<IActionResult> TrackingRuta(
         string pacienteId, [FromQuery] DateTime desde, [FromQuery] DateTime hasta)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 

@@ -8,7 +8,7 @@ public class BioGuardHub : Hub
 {
     public async Task JoinPacienteGroup(string pacienteId)
     {
-        var userId = Context.User?.FindFirst("sub")?.Value;
+        var userId = Context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId)) return;
         await Groups.AddToGroupAsync(Context.ConnectionId, $"paciente_{pacienteId}");
     }

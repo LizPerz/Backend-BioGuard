@@ -46,7 +46,7 @@ public class PacientesController : ControllerBase
     [HttpGet("mi-paciente")]
     public async Task<IActionResult> MiPaciente()
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Fetching mi-paciente for user: {UserId}", usuarioId);
@@ -70,7 +70,7 @@ public class PacientesController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -100,7 +100,7 @@ public class PacientesController : ControllerBase
     [HttpGet("by-usuario/{usuarioWebId}")]
     public async Task<IActionResult> GetByUsuario(string usuarioWebId)
     {
-        var currentUserId = User.FindFirst("sub")?.Value;
+        var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(currentUserId)) return Unauthorized();
 
@@ -128,7 +128,7 @@ public class PacientesController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Crear([FromBody] CrearPacienteRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         _logger.LogInformation("Creating paciente for user: {UserId}, name: {Nombre}", usuarioId, request.Nombre);
@@ -147,7 +147,7 @@ public class PacientesController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Editar(string id, [FromBody] UpdateNombreRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(id, usuarioId, "dueno"))
@@ -177,7 +177,7 @@ public class PacientesController : ControllerBase
     [Authorize(Roles = "dueno")]
     public async Task<IActionResult> Eliminar(string id)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
         if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(id, usuarioId, "dueno"))
@@ -208,7 +208,7 @@ public class PacientesController : ControllerBase
     [HttpPut("{id}/biometria")]
     public async Task<IActionResult> UpdateBiometria(string id, [FromBody] UpdateBiometriaRequest request)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -233,7 +233,7 @@ public class PacientesController : ControllerBase
     [HttpGet("{id}/qr")]
     public async Task<IActionResult> ObtenerQR(string id)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -260,7 +260,7 @@ public class PacientesController : ControllerBase
     [HttpPost("{id}/regenerar-qr")]
     public async Task<IActionResult> RegenerarQR(string id)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
@@ -285,7 +285,7 @@ public class PacientesController : ControllerBase
     [HttpGet("{id}/dispositivo")]
     public async Task<IActionResult> ObtenerDispositivo(string id)
     {
-        var usuarioId = User.FindFirst("sub")?.Value;
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
