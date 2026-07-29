@@ -325,5 +325,4 @@ public class CuidadoresController : ControllerBase
         _logger.LogInformation("Caregiver self-registered: {UsuarioId} linked to cuidador {CuidadorId}", user.Id, cuidador.Id);
         return Ok(new { message = "Cuenta creada. Ahora puedes iniciar sesión con tu correo y contraseña." });
     }
-
 }
