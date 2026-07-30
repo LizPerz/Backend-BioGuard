@@ -24,6 +24,9 @@ public interface IMongoDbContext
     IMongoCollection<Medicamento> Medicamentos { get; }
     IMongoCollection<Alerta> Alertas { get; }
     IMongoCollection<TokenBlacklist> TokenBlacklist { get; }
+    IMongoCollection<DeviceSession> DeviceSessions { get; }
+    IMongoCollection<ReporteCompartido> ReportesCompartidos { get; }
+    IMongoCollection<TicketSoporte> TicketsSoporte { get; }
 
     Task<T?> FindFirstOrDefaultAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter);
     Task<List<T>> FindToListAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter);

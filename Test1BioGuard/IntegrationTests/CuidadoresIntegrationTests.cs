@@ -111,6 +111,11 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
             It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = "pac123", UsuarioWebId = "user123" });
+
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
 

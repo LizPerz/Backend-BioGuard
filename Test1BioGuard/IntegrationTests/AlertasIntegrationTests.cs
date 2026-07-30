@@ -97,6 +97,11 @@ public class AlertasIntegrationTests : IClassFixture<CustomWebApplicationFactory
             It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = "pac123", UsuarioWebId = "user123" });
+
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
                 TestTokenHelper.GenerateDuenoToken());
@@ -118,15 +123,25 @@ public class AlertasIntegrationTests : IClassFixture<CustomWebApplicationFactory
     [Fact]
     public async Task Resolver_AlertaExiste_Retorna200()
     {
-        var mockResult = new Mock<UpdateResult>();
-        mockResult.Setup(r => r.ModifiedCount).Returns(1);
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
 
         _mockAlertas.Setup(c => c.UpdateOneAsync(
                 It.IsAny<FilterDefinition<Alerta>>(),
                 It.IsAny<UpdateDefinition<Alerta>>(),
                 It.IsAny<UpdateOptions>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(mockResult.Object);
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Alerta>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Alerta, bool>>>()))
+            .ReturnsAsync(new Alerta { Id = "a1", PacienteId = "pac123" });
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = "pac123", UsuarioWebId = "user123" });
 
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",

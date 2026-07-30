@@ -114,15 +114,20 @@ public class MedicamentosIntegrationTests : IClassFixture<CustomWebApplicationFa
     [Fact]
     public async Task RegistrarToma_MedicamentoExiste_Retorna200()
     {
-        var mockResult = new Mock<UpdateResult>();
-        mockResult.Setup(r => r.ModifiedCount).Returns(1);
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
 
         _mockMedicamentos.Setup(c => c.UpdateOneAsync(
                 It.IsAny<FilterDefinition<Medicamento>>(),
                 It.IsAny<UpdateDefinition<Medicamento>>(),
                 It.IsAny<UpdateOptions>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(mockResult.Object);
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Medicamento>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Medicamento, bool>>>()))
+            .ReturnsAsync(new Medicamento { Id = "m1", PacienteId = "pac123", Nombre = "Test", Dosis = "500mg", Horario = "8:00" });
 
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
