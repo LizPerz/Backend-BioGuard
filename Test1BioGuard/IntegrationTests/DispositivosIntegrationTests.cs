@@ -88,6 +88,11 @@ public class DispositivosIntegrationTests : IClassFixture<CustomWebApplicationFa
                 It.IsAny<System.Linq.Expressions.Expression<Func<Dispositivo, bool>>>()))
             .ReturnsAsync((Dispositivo?)null);
 
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = pacienteId, UsuarioWebId = "user123" });
+
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
 

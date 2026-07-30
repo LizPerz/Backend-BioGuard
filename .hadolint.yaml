@@ -1,0 +1,30 @@
+failure-threshold: warning
+format: json
+
+override:
+  - image: mcr.microsoft.com/dotnet/aspnet:9.0
+    rules:
+      DL3007: warning
+      DL3042: warning
+
+ignored:
+  - DL3008
+  - DL3010
+  - DL3018
+  - DL3029
+
+trustedRegistries:
+  - mcr.microsoft.com
+  - docker.io
+
+rules:
+  no-root-user: warning
+  no-env-secrets: error
+  exposed-ports:
+    - 8080
+  no-latest-tag: error
+  no-apt-get: error
+  no-apk: error
+  metadata:
+    - maintainer
+    - labels

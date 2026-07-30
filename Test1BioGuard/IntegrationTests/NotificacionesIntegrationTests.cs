@@ -86,6 +86,16 @@ public class NotificacionesIntegrationTests : IClassFixture<CustomWebApplication
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(mockUpdateResult.Object);
 
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Notificacion>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Notificacion, bool>>>()))
+            .ReturnsAsync(new Notificacion { Id = "not1", PacienteId = "pac123" });
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = "pac123", UsuarioWebId = "user123" });
+
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
 
@@ -102,6 +112,11 @@ public class NotificacionesIntegrationTests : IClassFixture<CustomWebApplication
             It.IsAny<InsertOneOptions>(),
             It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = "pac123", UsuarioWebId = "user123" });
 
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
@@ -164,6 +179,16 @@ public class NotificacionesIntegrationTests : IClassFixture<CustomWebApplication
                 It.IsAny<FilterDefinition<Notificacion>>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(mockResult.Object);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Notificacion>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Notificacion, bool>>>()))
+            .ReturnsAsync(new Notificacion { Id = "n1", PacienteId = "pac123" });
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = "pac123", UsuarioWebId = "user123" });
 
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",

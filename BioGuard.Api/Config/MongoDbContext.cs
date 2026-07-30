@@ -40,6 +40,9 @@ public class MongoDbContext : IMongoDbContext
     public virtual IMongoCollection<Medicamento> Medicamentos => _database.GetCollection<Medicamento>("medicamentos");
     public virtual IMongoCollection<Alerta> Alertas => _database.GetCollection<Alerta>("alertas");
     public virtual IMongoCollection<TokenBlacklist> TokenBlacklist => _database.GetCollection<TokenBlacklist>("token_blacklist");
+    public virtual IMongoCollection<DeviceSession> DeviceSessions => _database.GetCollection<DeviceSession>("device_sessions");
+    public virtual IMongoCollection<ReporteCompartido> ReportesCompartidos => _database.GetCollection<ReporteCompartido>("reportes_compartidos");
+    public virtual IMongoCollection<TicketSoporte> TicketsSoporte => _database.GetCollection<TicketSoporte>("tickets_soporte");
 
     public virtual async Task<T?> FindFirstOrDefaultAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter)
     {
