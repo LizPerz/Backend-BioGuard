@@ -11,8 +11,8 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
                     +--------+----------+
                              |
                     +--------v----------+
-                    |   .NET 9 API      |  Backend (este repositorio)
-                    |   85+ endpoints   |
+|   .NET 9 API      | Backend (este repositorio)
+|   94 endpoints    |
                     +--------+----------+
                              |
               +--------------+--------------+
@@ -57,7 +57,7 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 | CI/CD | GitHub Actions | |
 | Deploy | DigitalOcean App Platform | |
 | API Docs | Swagger / OpenAPI | |
-| Tests | xUnit + FluentAssertions | 423 tests |
+| Tests | xUnit + FluentAssertions | 458 tests |
 
 ## Funcionalidades
 
@@ -564,6 +564,43 @@ Authorization: Bearer <admin_token>
 ```
 
 ## Changelog
+
+### PR #63 — Correcciones de Seguridad + Cobertura Total de Tests (rama-Liz -> master)
+
+| Fix | Descripción |
+|---|---|
+| **Data leak tracking GPS** | Filtro `Eq` roto en `SensorService.ObtenerTrackingAsync` retornaba datos de **todos los pacientes**. Corregido para filtrar por `PacienteId`. |
+| **NullReferenceException en Biometría** | `UpdateBiometriaAsync` fallaba si `Biometria == null`. Se reemplaza todo el objeto en lugar de campos anidados. |
+| **Error masking** | `AuditoriaController` retornaba `200 OK` en excepción. Ahora retorna `500`. |
+| **FCM null role** | `NotificacionesController.RegistrarFcm` validaba `usuarioId` pero no `role`. Ahora rechaza si falta. |
+| **IPaymentGateway duplicado** | Stripe y PayPal registrados como `IPaymentGateway` — solo PayPal era resuelto. Se eliminan (código muerto). |
+| **IImageStorageService redundante** | `AddScoped` duplicado antes de `AddHttpClient`. Eliminado el redundante. |
+| **CS8618 eliminado** | `_database = null!` en constructor `protected` de `MongoDbContext`. |
+| **Cobertura de tests al 100%** | **44 tests nuevos** para AdminController, MLController, login-google, refresh, logout, vincular, FCM y migrate-prices. **458 tests**, 0 fallos. |
+| **0 warnings, 0 errores** | Build completamente limpio. |
+
+### PR #62 — Logout Total + Multi-Rol Refresh Token (rama-Liz -> master)
+
+| Fix | Descripción |
+|---|---|
+| **Logout total** | `POST /api/Auth/logout-all` — revoca todas las sesiones del usuario y blacklistea el token actual. |
+| **Multi-rol refresh token** | `RefreshTokenAsync` ahora maneja correctamente roles `dueno`, `paciente` y `cuidador` al regenerar tokens. |
+| **Role preservado** | El rol se almacena en el refresh token y se restaura al refrescar. |
+| **Tests** | Tests de integración para `logout-all` (éxito y sin token). |
+
+### PR #61 — Integración Zip de Liz + Máxima Seguridad (rama-Liz -> master)
+
+| Fix | Descripción |
+|---|---|
+| **AdminController** | Endpoints de administración: listar/buscar usuarios, ver detalle, pausar/reactivar cuentas, tickets soporte, métricas del sistema. |
+| **Modelos nuevos** | `TicketSoporte`, `ReporteCompartido`, `DeviceSession` con sus colecciones en MongoDB. |
+| **MLService + MLController** | Módulo 6 (AI Console): predicciones, recomendaciones, diagnóstico, entrenamiento/reentrenamiento de modelos, métricas. |
+| **Pagos con métodos** | `PagosService` con historial, cancelación. Gateways Stripe/PayPal preparados. |
+| **Notificaciones push** | `FirebasePushNotificationService` + `FcmToken` para push notifications. |
+| **PlanLimiteService** | Validación de límites por plan (pacientes, cuidadores, GPS, AI Console). |
+| **Reportes compartidos** | Endpoints para compartir reportes clínicos. |
+| **Seguridad máxima** | Ownership checks, rate limiting, validación de entrada, headers de seguridad. |
+| **Tests** | Cobertura completa de servicios y controladores. |
 
 ### PR #60 — Auditoría de Seguridad Integral (rama-Liz -> master)
 
