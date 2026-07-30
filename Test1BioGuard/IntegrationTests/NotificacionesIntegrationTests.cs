@@ -274,4 +274,89 @@ public class NotificacionesIntegrationTests : IClassFixture<CustomWebApplication
         var response = await _client.GetAsync("/api/Notificaciones/by-usuario/user123");
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
+
+    [Fact]
+    public async Task RegistrarFcm_NuevoToken_Retorna200()
+    {
+        var mockFcmTokens = new Mock<IMongoCollection<FcmToken>>();
+        _mockDb.Setup(db => db.FcmTokens).Returns(mockFcmTokens.Object);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<FcmToken>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<FcmToken, bool>>>()))
+            .ReturnsAsync((FcmToken?)null);
+
+        mockFcmTokens.Setup(c => c.InsertOneAsync(
+                It.IsAny<FcmToken>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateToken("user123", "dueno"));
+
+        var request = new RegistrarFcmRequest("fcm-token-abc", "android");
+        var response = await _client.PostAsJsonAsync("/api/Notificaciones/fcm", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("message").GetString().Should().Be("Token FCM registrado");
+    }
+
+    [Fact]
+    public async Task RegistrarFcm_TokenExistente_Actualiza()
+    {
+        var mockFcmTokens = new Mock<IMongoCollection<FcmToken>>();
+        _mockDb.Setup(db => db.FcmTokens).Returns(mockFcmTokens.Object);
+
+        var existing = new FcmToken { Id = "fcm1", UsuarioId = "user123", Rol = "dueno", Token = "old-token", Plataforma = "ios" };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<FcmToken>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<FcmToken, bool>>>()))
+            .ReturnsAsync(existing);
+
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
+        mockFcmTokens.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<FcmToken>>(),
+                It.IsAny<UpdateDefinition<FcmToken>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateToken("user123", "dueno"));
+
+        var request = new RegistrarFcmRequest("new-token", "android");
+        var response = await _client.PostAsJsonAsync("/api/Notificaciones/fcm", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("message").GetString().Should().Be("Token FCM registrado");
+    }
+
+    [Fact]
+    public async Task RegistrarFcm_SinToken_Retorna401()
+    {
+        var request = new RegistrarFcmRequest("token", "android");
+        var response = await _client.PostAsJsonAsync("/api/Notificaciones/fcm", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task RegistrarFcm_SinRole_Retorna401()
+    {
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateToken("user123", ""));
+
+        var request = new RegistrarFcmRequest("token", "android");
+        var response = await _client.PostAsJsonAsync("/api/Notificaciones/fcm", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }

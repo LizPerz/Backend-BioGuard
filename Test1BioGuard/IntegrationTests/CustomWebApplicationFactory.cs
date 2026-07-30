@@ -49,6 +49,9 @@ public class CustomWebApplicationFactory : WebApplicationFactory<BioGuard.Api.Pr
             MockDbContext.Setup(db => db.Medicamentos).Returns(new Mock<IMongoCollection<Medicamento>>().Object);
             MockDbContext.Setup(db => db.Alertas).Returns(new Mock<IMongoCollection<Alerta>>().Object);
             MockDbContext.Setup(db => db.TokenBlacklist).Returns(new Mock<IMongoCollection<TokenBlacklist>>().Object);
+            MockDbContext.Setup(db => db.DeviceSessions).Returns(new Mock<IMongoCollection<DeviceSession>>().Object);
+            MockDbContext.Setup(db => db.ReportesCompartidos).Returns(new Mock<IMongoCollection<ReporteCompartido>>().Object);
+            MockDbContext.Setup(db => db.TicketsSoporte).Returns(new Mock<IMongoCollection<TicketSoporte>>().Object);
 
             services.AddSingleton(MockDbContext.Object);
             services.AddSingleton(new MongoDbConfig

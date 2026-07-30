@@ -35,12 +35,15 @@ public class PacienteService
     public async Task UpdateBiometriaAsync(string pacienteId, UpdateBiometriaRequest request)
     {
         var update = Builders<Paciente>.Update
-            .Set(p => p.Biometria.Edad, request.Edad)
-            .Set(p => p.Biometria.PesoKg, request.PesoKg)
-            .Set(p => p.Biometria.EstaturaCm, request.EstaturaCm)
-            .Set(p => p.Biometria.EsDiabetico, request.EsDiabetico)
-            .Set(p => p.Biometria.FamiliaresDiabetes, request.FamiliaresDiabetes)
-            .Set(p => p.Biometria.ActividadFisica, request.ActividadFisica)
+            .Set(p => p.Biometria, new Biometria
+            {
+                Edad = request.Edad,
+                PesoKg = request.PesoKg,
+                EstaturaCm = request.EstaturaCm,
+                EsDiabetico = request.EsDiabetico,
+                FamiliaresDiabetes = request.FamiliaresDiabetes,
+                ActividadFisica = request.ActividadFisica
+            })
             .Set(p => p.PerfilCompletado, true);
 
         await _db.Pacientes.UpdateOneAsync(p => p.Id == pacienteId, update);

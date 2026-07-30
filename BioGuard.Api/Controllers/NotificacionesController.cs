@@ -113,9 +113,9 @@ public class NotificacionesController : ControllerBase
     {
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
-        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+        if (string.IsNullOrEmpty(usuarioId) || string.IsNullOrEmpty(role)) return Unauthorized();
 
-        _logger.LogInformation("Registering FCM token for user {UsuarioId}, platform: {Plataforma}", usuarioId, request.Plataforma);
+        _logger.LogInformation("Registering FCM token for user {UsuarioId}, role {Role}, platform: {Plataforma}", usuarioId, role, request.Plataforma);
 
         var existing = await _db.FindFirstOrDefaultAsync(_db.FcmTokens, t => t.UsuarioId == usuarioId && t.Rol == role);
         if (existing != null)
