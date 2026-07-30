@@ -436,6 +436,126 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
+    public async Task LoginGoogle_TokenInvalido_Retorna401()
+    {
+        var request = new LoginGoogleRequest("invalid-google-token");
+        var response = await _client.PostAsJsonAsync("/api/Auth/login-google", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Refresh_ConTokenValido_Retorna200()
+    {
+        var mockRefreshTokens = new Mock<IMongoCollection<RefreshToken>>();
+        _mockDb.Setup(db => db.RefreshTokens).Returns(mockRefreshTokens.Object);
+
+        var storedRefresh = new RefreshToken
+        {
+            Id = "rt1",
+            Token = "valid-refresh-token",
+            UsuarioId = "user123",
+            Rol = "dueno",
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<RefreshToken>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<RefreshToken, bool>>>()))
+            .ReturnsAsync(storedRefresh);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(new UsuarioWeb { Id = "user123", Correo = "test@test.com", Nombre = "Test", PlanId = "plan1" });
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(new Plan { Id = "plan1", Nombre = "Premium" });
+
+        mockRefreshTokens.Setup(c => c.InsertOneAsync(
+                It.IsAny<RefreshToken>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
+        mockRefreshTokens.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<RefreshToken>>(),
+                It.IsAny<UpdateDefinition<RefreshToken>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        var request = new RefreshTokenRequest("valid-refresh-token");
+        var response = await _client.PostAsJsonAsync("/api/Auth/refresh", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("accessToken").GetString().Should().NotBeNullOrEmpty();
+        doc.RootElement.GetProperty("refreshToken").GetString().Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task Refresh_TokenInvalido_Retorna401()
+    {
+        var mockRefreshTokens = new Mock<IMongoCollection<RefreshToken>>();
+        _mockDb.Setup(db => db.RefreshTokens).Returns(mockRefreshTokens.Object);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<RefreshToken>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<RefreshToken, bool>>>()))
+            .ReturnsAsync((RefreshToken?)null);
+
+        var request = new RefreshTokenRequest("invalid-token");
+        var response = await _client.PostAsJsonAsync("/api/Auth/refresh", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Logout_ConTokenValido_Retorna200()
+    {
+        var mockTokenBlacklist = new Mock<IMongoCollection<TokenBlacklist>>();
+        _mockDb.Setup(db => db.TokenBlacklist).Returns(mockTokenBlacklist.Object);
+        mockTokenBlacklist.Setup(c => c.InsertOneAsync(
+                It.IsAny<TokenBlacklist>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var mockAuditoria = new Mock<IMongoCollection<Auditoria>>();
+        _mockDb.Setup(db => db.Auditoria).Returns(mockAuditoria.Object);
+        mockAuditoria.Setup(c => c.InsertOneAsync(
+                It.IsAny<Auditoria>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateToken("user123", "dueno", new() { { "jti", "test-jti-123" } }));
+
+        var response = await _client.PostAsync("/api/Auth/logout", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("message").GetString().Should().Be("Sesión cerrada correctamente");
+    }
+
+    [Fact]
+    public async Task Logout_SinToken_Retorna401()
+    {
+        var response = await _client.PostAsync("/api/Auth/logout", null);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task LogoutAll_ConTokenValido_Retorna200()
     {
         var mockRefreshTokens = new Mock<IMongoCollection<RefreshToken>>();

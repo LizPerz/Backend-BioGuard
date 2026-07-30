@@ -338,4 +338,46 @@ public class PlanesIntegrationTests : IClassFixture<CustomWebApplicationFactory>
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
+
+    [Fact]
+    public async Task MigratePrices_ActualizaPlanes_Retorna200()
+    {
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
+        _mockPlanes.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<Plan>>(),
+                It.IsAny<UpdateDefinition<Plan>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateDuenoToken());
+
+        var response = await _client.PostAsJsonAsync("/api/Planes/migrate-prices", new { });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("message").GetString().Should().Contain("MXN");
+    }
+
+    [Fact]
+    public async Task MigratePrices_SinAuth_Retorna401()
+    {
+        var response = await _client.PostAsJsonAsync("/api/Planes/migrate-prices", new { });
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task MigratePrices_NoEsAdmin_Retorna403()
+    {
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GeneratePacienteToken("pac123"));
+
+        var response = await _client.PostAsJsonAsync("/api/Planes/migrate-prices", new { });
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
 }

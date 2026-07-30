@@ -387,4 +387,120 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
+
+    [Fact]
+    public async Task Vincular_CodigoValido_Retorna200()
+    {
+        var cuidador = new Cuidador
+        {
+            Id = "cuid123",
+            CodigoAccesoQr = "CU-VALID",
+            PacienteId = "pac123",
+            UsuarioWebId = "owner123",
+            Nombre = "Maria",
+            Parentesco = "Madre"
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Cuidador>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(cuidador);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync((UsuarioWeb?)null);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(new Plan { Id = "plan_gratis", Nombre = "Gratis" });
+
+        var mockUsuarios = new Mock<IMongoCollection<UsuarioWeb>>();
+        _mockDb.Setup(db => db.UsuariosWeb).Returns(mockUsuarios.Object);
+        mockUsuarios.Setup(c => c.InsertOneAsync(
+                It.IsAny<UsuarioWeb>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
+        _mockCuidadores.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<Cuidador>>(),
+                It.IsAny<UpdateDefinition<Cuidador>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        var request = new VincularCuidadorRequest("CU-VALID", "Maria Lopez", "maria@test.com", "Password123!");
+        var response = await _client.PostAsJsonAsync("/api/Cuidadores/vincular", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("message").GetString().Should().Contain("Cuenta creada");
+    }
+
+    [Fact]
+    public async Task Vincular_CodigoInvalido_Retorna404()
+    {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Cuidador>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync((Cuidador?)null);
+
+        var request = new VincularCuidadorRequest("INVALID", "Test User", "test@test.com", "Password123!");
+        var response = await _client.PostAsJsonAsync("/api/Cuidadores/vincular", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Vincular_CodigoYaUsado_Retorna400()
+    {
+        var cuidador = new Cuidador
+        {
+            Id = "cuid123",
+            CodigoAccesoQr = "CU-USED",
+            UsuarioVinculadoId = "existing_user",
+            Nombre = "Maria"
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Cuidador>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(cuidador);
+
+        var request = new VincularCuidadorRequest("CU-USED", "Test User", "test@test.com", "Password123!");
+        var response = await _client.PostAsJsonAsync("/api/Cuidadores/vincular", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Vincular_CorreoExistente_Retorna400()
+    {
+        var cuidador = new Cuidador
+        {
+            Id = "cuid123",
+            CodigoAccesoQr = "CU-VALID",
+            Nombre = "Maria"
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Cuidador>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(cuidador);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(new UsuarioWeb { Id = "existing", Correo = "existente@test.com" });
+
+        var request = new VincularCuidadorRequest("CU-VALID", "Test User", "existente@test.com", "Password123!");
+        var response = await _client.PostAsJsonAsync("/api/Cuidadores/vincular", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
 }
