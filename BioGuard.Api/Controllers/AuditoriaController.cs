@@ -50,7 +50,7 @@ public class AuditoriaController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error listing audit logs");
-            return Ok(new List<object>());
+            return StatusCode(500, new { message = "Error interno al listar auditoría" });
         }
     }
 }

@@ -141,7 +141,7 @@ public class SensorService
 
     public async Task<List<TrackingGps>> ObtenerTrackingAsync(string pacienteId, int limite = 100)
     {
-        var filter = Builders<TrackingGps>.Filter.Eq(t => t.Meta.PacienteId == pacienteId, true);
+        var filter = Builders<TrackingGps>.Filter.Eq(t => t.Meta.PacienteId, pacienteId);
         var sort = Builders<TrackingGps>.Sort.Descending(t => t.Timestamp);
         return await _db.FindToListAsync(_db.TrackingGps, filter, sort, limite);
     }

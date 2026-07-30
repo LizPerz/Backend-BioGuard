@@ -195,10 +195,8 @@ builder.Services.AddScoped<IRiesgoService, RiesgoService>();
 builder.Services.AddScoped<IPacienteAccessService, PacienteAccessService>();
 builder.Services.AddScoped<IPlanLimiteService, PlanLimiteService>();
 builder.Services.AddScoped<IPushNotificationService, FirebasePushNotificationService>();
-builder.Services.AddScoped<IImageStorageService, ImgBbImageStorageService>();
 builder.Services.AddHttpClient<IImageStorageService, ImgBbImageStorageService>();
-builder.Services.AddScoped<IPaymentGateway, StripePaymentGateway>();
-builder.Services.AddScoped<IPaymentGateway, PayPalPaymentGateway>();
+// IPaymentGateway registrations removed - PagosService manages payments internally without gateway abstraction
 
 // =============================================
 // CONTROLLERS + SWAGGER

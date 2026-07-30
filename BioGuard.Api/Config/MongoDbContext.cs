@@ -20,7 +20,7 @@ public class MongoDbContext : IMongoDbContext
         _database = client.GetDatabase(config.DatabaseName);
     }
 
-    protected MongoDbContext() { }
+    protected MongoDbContext() => _database = null!;
 
     public virtual IMongoCollection<Plan> Planes => _database.GetCollection<Plan>("planes");
     public virtual IMongoCollection<UsuarioWeb> UsuariosWeb => _database.GetCollection<UsuarioWeb>("usuarios_web");
