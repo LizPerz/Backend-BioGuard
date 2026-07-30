@@ -207,7 +207,7 @@ public class AuthService
         if (paciente != null)
         {
             var token = GenerateToken(paciente.Id, paciente.CodigoAccesoQr, "paciente", pacienteId: paciente.Id);
-            var refreshToken = await CreateAndStoreRefreshTokenAsync(paciente.Id);
+            var refreshToken = await CreateAndStoreRefreshTokenAsync(paciente.Id, "paciente");
             _logger.LogInformation("Patient login by code: {PacienteId}", paciente.Id);
             return new AuthResponse(token, paciente.Id, paciente.Nombre, "paciente", "paciente", RefreshToken: refreshToken);
         }
@@ -216,7 +216,7 @@ public class AuthService
         if (cuidador != null)
         {
             var token = GenerateToken(cuidador.Id, cuidador.CodigoAccesoQr, "cuidador");
-            var refreshToken = await CreateAndStoreRefreshTokenAsync(cuidador.Id);
+            var refreshToken = await CreateAndStoreRefreshTokenAsync(cuidador.Id, "cuidador");
             _logger.LogInformation("Caregiver login by code: {CuidadorId}", cuidador.Id);
             return new AuthResponse(token, cuidador.Id, cuidador.Nombre, "cuidador", "cuidador", RefreshToken: refreshToken);
         }
@@ -237,11 +237,46 @@ public class AuthService
             return null;
         }
 
-        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Id == stored.UsuarioId);
-        if (user == null)
+        var role = stored.Rol ?? "dueno";
+        string userId;
+        string userEmail;
+        string userName;
+
+        if (role == "paciente")
         {
-            _logger.LogWarning("Refresh token user not found: {UsuarioId}", stored.UsuarioId);
-            return null;
+            var paciente = await _db.FindFirstOrDefaultAsync(_db.Pacientes, p => p.Id == stored.UsuarioId);
+            if (paciente == null)
+            {
+                _logger.LogWarning("Refresh token paciente not found: {UsuarioId}", stored.UsuarioId);
+                return null;
+            }
+            userId = paciente.Id;
+            userEmail = paciente.CodigoAccesoQr;
+            userName = paciente.Nombre;
+        }
+        else if (role == "cuidador")
+        {
+            var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.Id == stored.UsuarioId);
+            if (cuidador == null)
+            {
+                _logger.LogWarning("Refresh token cuidador not found: {UsuarioId}", stored.UsuarioId);
+                return null;
+            }
+            userId = cuidador.Id;
+            userEmail = cuidador.CodigoAccesoQr;
+            userName = cuidador.Nombre;
+        }
+        else
+        {
+            var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Id == stored.UsuarioId);
+            if (user == null)
+            {
+                _logger.LogWarning("Refresh token user not found: {UsuarioId}", stored.UsuarioId);
+                return null;
+            }
+            userId = user.Id;
+            userEmail = user.Correo;
+            userName = $"{user.Nombre} {user.ApellidoPaterno}";
         }
 
         var newRefreshToken = GenerateRefreshToken();
@@ -258,16 +293,18 @@ public class AuthService
 
         await RevokeRefreshTokenAsync(oldRefreshCopy);
 
+        var pacienteId = role == "paciente" ? userId : null;
         await _db.RefreshTokens.InsertOneAsync(new RefreshToken
         {
-            UsuarioId = user.Id,
+            UsuarioId = userId,
+            Rol = role,
             Token = newRefreshToken,
             ExpiresAt = DateTime.UtcNow.AddDays(_refreshTokenDays),
             Ip = ip
         });
 
-        var accessToken = GenerateToken(user.Id, user.Correo, "dueno");
-        _logger.LogInformation("Token refreshed for user: {UserId}", user.Id);
+        var accessToken = GenerateToken(userId, userEmail, role, pacienteId: pacienteId);
+        _logger.LogInformation("Token refreshed for user: {UserId}, role: {Role}", userId, role);
 
         return new RefreshTokenResponse(accessToken, newRefreshToken);
     }
@@ -464,14 +501,25 @@ public class AuthService
         return blacklisted != null;
     }
 
+    public async Task<bool> RevocarTodasLasSesionesAsync(string usuarioId)
+    {
+        var filter = Builders<RefreshToken>.Filter.Where(t =>
+            t.UsuarioId == usuarioId && t.RevokedAt == null);
+        var update = Builders<RefreshToken>.Update.Set(t => t.RevokedAt, DateTime.UtcNow);
+        var result = await _db.RefreshTokens.UpdateManyAsync(filter, update);
+        _logger.LogInformation("All sessions revoked for user: {UsuarioId}, count: {Count}", usuarioId, result.ModifiedCount);
+        return result.ModifiedCount > 0;
+    }
+
     // ── Helpers ────────────────────────────────────────────
 
-    private async Task<string> CreateAndStoreRefreshTokenAsync(string userId)
+    private async Task<string> CreateAndStoreRefreshTokenAsync(string userId, string role = "dueno")
     {
         var refreshToken = GenerateRefreshToken();
         await _db.RefreshTokens.InsertOneAsync(new RefreshToken
         {
             UsuarioId = userId,
+            Rol = role,
             Token = refreshToken,
             ExpiresAt = DateTime.UtcNow.AddDays(_refreshTokenDays),
         });
