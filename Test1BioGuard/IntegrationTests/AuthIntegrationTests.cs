@@ -434,4 +434,57 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
+
+    [Fact]
+    public async Task LogoutAll_ConTokenValido_Retorna200()
+    {
+        var mockRefreshTokens = new Mock<IMongoCollection<RefreshToken>>();
+        _mockDb.Setup(db => db.RefreshTokens).Returns(mockRefreshTokens.Object);
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(2);
+        mockRefreshTokens.Setup(c => c.UpdateManyAsync(
+                It.IsAny<FilterDefinition<RefreshToken>>(),
+                It.IsAny<UpdateDefinition<RefreshToken>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        var mockTokenBlacklist = new Mock<IMongoCollection<TokenBlacklist>>();
+        _mockDb.Setup(db => db.TokenBlacklist).Returns(mockTokenBlacklist.Object);
+        mockTokenBlacklist.Setup(c => c.InsertOneAsync(
+                It.IsAny<TokenBlacklist>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var mockAuditoria = new Mock<IMongoCollection<Auditoria>>();
+        _mockDb.Setup(db => db.Auditoria).Returns(mockAuditoria.Object);
+        mockAuditoria.Setup(c => c.InsertOneAsync(
+                It.IsAny<Auditoria>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<TokenBlacklist>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<TokenBlacklist, bool>>>()))
+            .ReturnsAsync((TokenBlacklist?)null);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken("user123"));
+
+        var response = await _client.PostAsync("/api/Auth/logout-all", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("message").GetString().Should().Be("Sesión cerrada en todos los dispositivos");
+    }
+
+    [Fact]
+    public async Task LogoutAll_SinToken_Retorna401()
+    {
+        var response = await _client.PostAsync("/api/Auth/logout-all", null);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }

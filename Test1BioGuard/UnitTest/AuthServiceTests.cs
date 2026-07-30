@@ -435,4 +435,156 @@ public class AuthServiceTests
 
         result.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task RevocarTodasLasSesionesAsync_UsuarioExistente_RetornaTrue()
+    {
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(3);
+        _mockRefreshTokens.Setup(c => c.UpdateManyAsync(
+                It.IsAny<FilterDefinition<RefreshToken>>(),
+                It.IsAny<UpdateDefinition<RefreshToken>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        var result = await _service.RevocarTodasLasSesionesAsync("user123");
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_Paciente_RetornaRefreshTokenResponse()
+    {
+        var storedToken = new RefreshToken
+        {
+            Id = "rt1", UsuarioId = "pac123", Rol = "paciente", Token = "old-refresh-token",
+            ExpiresAt = DateTime.UtcNow.AddDays(7), CreatedAt = DateTime.UtcNow
+        };
+        var paciente = new Paciente { Id = "pac123", CodigoAccesoQr = "ABC123", Nombre = "Paciente Test" };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<RefreshToken>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<RefreshToken, bool>>>()))
+            .ReturnsAsync(storedToken);
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(paciente);
+
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
+        _mockRefreshTokens.Setup(c => c.UpdateManyAsync(
+                It.IsAny<FilterDefinition<RefreshToken>>(),
+                It.IsAny<UpdateDefinition<RefreshToken>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        var request = new RefreshTokenRequest("old-refresh-token");
+        var result = await _service.RefreshTokenAsync(request);
+
+        result.Should().NotBeNull();
+        result!.AccessToken.Should().NotBeNullOrEmpty();
+        result.RefreshToken.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_Cuidador_RetornaRefreshTokenResponse()
+    {
+        var storedToken = new RefreshToken
+        {
+            Id = "rt2", UsuarioId = "cuid123", Rol = "cuidador", Token = "old-refresh-token-cuid",
+            ExpiresAt = DateTime.UtcNow.AddDays(7), CreatedAt = DateTime.UtcNow
+        };
+        var cuidador = new Cuidador { Id = "cuid123", CodigoAccesoQr = "CU-ABC", Nombre = "Cuidador Test" };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<RefreshToken>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<RefreshToken, bool>>>()))
+            .ReturnsAsync(storedToken);
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Cuidador>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(cuidador);
+
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
+        _mockRefreshTokens.Setup(c => c.UpdateManyAsync(
+                It.IsAny<FilterDefinition<RefreshToken>>(),
+                It.IsAny<UpdateDefinition<RefreshToken>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        var request = new RefreshTokenRequest("old-refresh-token-cuid");
+        var result = await _service.RefreshTokenAsync(request);
+
+        result.Should().NotBeNull();
+        result!.AccessToken.Should().NotBeNullOrEmpty();
+        result.RefreshToken.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_Dueno_RetornaRefreshTokenResponse()
+    {
+        var storedToken = new RefreshToken
+        {
+            Id = "rt3", UsuarioId = "user123", Rol = "dueno", Token = "old-refresh-token-dueno",
+            ExpiresAt = DateTime.UtcNow.AddDays(7), CreatedAt = DateTime.UtcNow
+        };
+        var user = new UsuarioWeb
+        {
+            Id = "user123", Correo = "test@test.com", Nombre = "Test", ApellidoPaterno = "User"
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<RefreshToken>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<RefreshToken, bool>>>()))
+            .ReturnsAsync(storedToken);
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(user);
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync((Plan?)null);
+
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
+        _mockRefreshTokens.Setup(c => c.UpdateManyAsync(
+                It.IsAny<FilterDefinition<RefreshToken>>(),
+                It.IsAny<UpdateDefinition<RefreshToken>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        var request = new RefreshTokenRequest("old-refresh-token-dueno");
+        var result = await _service.RefreshTokenAsync(request);
+
+        result.Should().NotBeNull();
+        result!.AccessToken.Should().NotBeNullOrEmpty();
+        result.RefreshToken.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_TokenInactivo_RetornaNull()
+    {
+        var storedToken = new RefreshToken
+        {
+            Id = "rt4", UsuarioId = "user123", Rol = "dueno", Token = "expired-token",
+            ExpiresAt = DateTime.UtcNow.AddDays(-1), CreatedAt = DateTime.UtcNow
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<RefreshToken>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<RefreshToken, bool>>>()))
+            .ReturnsAsync(storedToken);
+
+        var request = new RefreshTokenRequest("expired-token");
+        var result = await _service.RefreshTokenAsync(request);
+
+        result.Should().BeNull();
+    }
 }

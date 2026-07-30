@@ -236,4 +236,33 @@ public class AuthController : ControllerBase
         await _auditoriaService.RegistrarAsync(userId, "logout", "usuarios_web", userId, ip);
         return Ok(new { message = "Sesión cerrada correctamente" });
     }
+
+    // ── Logout Total (TODOS los dispositivos) ──────────────
+    // POST /api/Auth/logout-all [WEB]
+
+    [HttpPost("logout-all")]
+    [Authorize]
+    public async Task<IActionResult> LogoutAll()
+    {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        _logger.LogInformation("Revoking all sessions for user: {UsuarioId}", usuarioId);
+        await _authService.RevocarTodasLasSesionesAsync(usuarioId);
+
+        var jti = User.FindFirst("jti")?.Value;
+        if (jti != null)
+        {
+            var expClaim = User.FindFirst("exp")?.Value;
+            var expiresAt = expClaim != null
+                ? DateTimeOffset.FromUnixTimeSeconds(long.Parse(expClaim)).UtcDateTime
+                : DateTime.UtcNow.AddMinutes(30);
+            await _authService.RevokeTokenAsync(jti, expiresAt);
+        }
+
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(usuarioId, "logout_total", "usuarios_web", usuarioId, ip);
+        _logger.LogInformation("All sessions terminated for user: {UsuarioId}", usuarioId);
+        return Ok(new { message = "Sesión cerrada en todos los dispositivos" });
+    }
 }

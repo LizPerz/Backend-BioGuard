@@ -12,6 +12,9 @@ public class RefreshToken
     [BsonElement("usuario_id")]
     public string UsuarioId { get; set; } = string.Empty;
 
+    [BsonElement("rol")]
+    public string Rol { get; set; } = string.Empty;
+
     [BsonElement("token")]
     public string Token { get; set; } = string.Empty;
 
