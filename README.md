@@ -57,7 +57,7 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 | CI/CD | GitHub Actions | |
 | Deploy | DigitalOcean App Platform | |
 | API Docs | Swagger / OpenAPI | |
-| Tests | xUnit + FluentAssertions | 458 tests |
+| Tests | xUnit + FluentAssertions | 480 tests |
 
 ## Funcionalidades
 
@@ -76,6 +76,10 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 - CRUD completo de pacientes
 - 1 usuario_web = 1 paciente (máximo)
 - Edad calculada automáticamente desde fecha de nacimiento
+- Datos biométricos del onboarding móvil: fecha de nacimiento, peso (kg), estatura (cm), sexo, actividad física, diabetes (paciente y familiares)
+- Alta con datos completos en un solo `POST /api/Pacientes` (retrocompatible: solo `{ nombre }` sigue funcionando)
+- `PUT /api/Pacientes/{id}/biometria` para guardar/editar biometría (incluye fecha de nacimiento y sexo)
+- Perfil con código QR (`codigoAccesoQr`) devuelto en `GET mi-paciente`
 - Foto de perfil
 
 ### Módulo 3: Cuidadores y Dispositivos
@@ -115,11 +119,11 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 - Métricas de modelos
 
 ### Módulo 9: Pagos y Planes
-- 3 planes: Gratis ($0, 1 cuidador), Familiar ($5 MXN, 3), Pro ($10 MXN, 6)
-- Sesiones de pago y historial
-- Recibos de pago
-- Cancelación de pagos
-- Migración de precios
+- 3 planes: Gratis ($0), Familiar ($5 MXN), Pro ($10 MXN)
+- **Pagos reales con Stripe y Mercado Pago**: creación de sesión de checkout (especificando `metodoPago: "stripe" | "mercadopago"`), redirección al gateway, confirmación vía webhook seguro (firma HMAC / header de firma)
+- Webhooks: `POST /api/Pagos/webhook/stripe` y `POST /api/Pagos/webhook/mercadopago` (verificación de firma, idempotencia, sin exponer secretos)
+- Historial de pagos y recibos
+- Cancelación de pagos/preferencias
 
 ### Módulo 10: Web Dashboard
 - Perfil de usuario con edición
@@ -187,6 +191,11 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 | 2FA enviar | 3 req/min |
 | 2FA verificar | 5 req/min |
 | Forgot password | 3 req/min |
+| Refresh token | 10 req/min |
+| Reset password | 3 req/min |
+| Cambiar password (PUT) | 3 req/min |
+| Sensores/lectura | 60 req/min |
+| Sensores/lectura-batch | 10 req/min |
 
 ### Validación de Entrada
 - DTOs con `[Required]`, `[StringLength]`, `[Range]`, `[EmailAddress]`, `[MinLength]`
@@ -284,7 +293,7 @@ BioGuard.Api/
 - **token_blacklist**: TTL en `expires_at`
 - **Unique indexes**: `correo` en `usuarios_web`, `macAddress` en `dispositivos`
 
-## API Endpoints (85+)
+## API Endpoints (90+)
 
 ### Auth (10 endpoints)
 
@@ -301,13 +310,16 @@ BioGuard.Api/
 | POST | `/api/Auth/logout` | Revocar token | JWT |
 | POST | `/api/Auth/reset-password` | Cambiar password | JWT |
 
-### Pacientes (4 endpoints)
+### Pacientes (7 endpoints)
 
 | Método | Ruta | Descripción | Auth |
 |---|---|---|---|
-| GET | `/api/Pacientes/mi-paciente` | Mi paciente | JWT |
-| GET | `/api/Pacientes/{id}` | Paciente por ID | JWT |
+| POST | `/api/Pacientes` | Crear paciente (onboarding completo o solo nombre) | JWT (dueño) |
+| GET | `/api/Pacientes/mi-paciente` | Mi paciente con datos biométricos + QR | JWT |
+| GET | `/api/Pacientes/{id}` | Paciente por ID (datos completos) | JWT |
 | PUT | `/api/Pacientes/{id}` | Actualizar paciente | JWT (dueño) |
+| PUT | `/api/Pacientes/{id}/biometria` | Guardar/editar biometría (fecha nacimiento, sexo, peso, talla, actividad) | JWT |
+| GET | `/api/Pacientes/by-usuario/{usuarioWebId}` | Listar pacientes de un usuario | JWT (dueño) |
 | DELETE | `/api/Pacientes/{id}` | Eliminar paciente + cascada | JWT (dueño) |
 
 ### Sensores (15 endpoints)
@@ -388,14 +400,16 @@ BioGuard.Api/
 | POST | `/api/ML/reentrenar` | Re-entrenar modelo | JWT |
 | POST | `/api/ML/diagnosticar` | Diagnóstico puntual | JWT |
 
-### Pagos (4 endpoints)
+### Pagos (6 endpoints)
 
 | Método | Ruta | Descripción | Auth |
 |---|---|---|---|
 | GET | `/api/Pagos/historial` | Historial de pagos | JWT |
-| POST | `/api/Pagos/crear-sesion` | Crear sesión de pago | JWT |
+| POST | `/api/Pagos/crear-sesion` | Crear sesión de pago (Stripe o Mercado Pago) | JWT |
 | GET | `/api/Pagos/{id}/recibo` | Recibo de pago | JWT |
 | POST | `/api/Pagos/cancelar` | Cancelar pago | JWT |
+| POST | `/api/Pagos/webhook/stripe` | Webhook Stripe (firma verificada) | Firma HMAC |
+| POST | `/api/Pagos/webhook/mercadopago` | Webhook Mercado Pago (firma verificada) | Firma HMAC |
 
 ### Planes (7 endpoints)
 
@@ -505,7 +519,7 @@ docker run -p 5000:8080 \
 
 ### CI/CD Pipeline (GitHub Actions)
 
-1. **Build & Test**: Compila, corre 423 tests, NuGet audit, licencias
+1. **Build & Test**: Compila, corre 480 tests, NuGet audit, licencias
 2. **CodeQL Analysis (SAST)**: Análisis estático de seguridad
 3. **Secret Scanning**: Escaneo de secretos expuestos
 4. **Container Security Scan**: Escaneo de vulnerabilidades en la imagen Docker
@@ -532,10 +546,10 @@ dotnet test --verbosity minimal
 
 | Tipo | Cantidad | Descripción |
 |---|---|---|
-| Unit Tests | ~200 | Servicios aislados con mocks |
-| Integration Tests | ~100 | Endpoints HTTP completos |
-| Security Tests | ~80 | IDOR, auth, input validation, timing |
-| Load Tests | ~40 | Rate limiting, batch processing |
+| Unit Tests | ~210 | Servicios aislados con mocks |
+| Integration Tests | ~110 | Endpoints HTTP completos |
+| Security Tests | ~85 | IDOR, auth, input validation, timing, rate limiting |
+| Non-Functional Tests | ~5 | Smoke tests (health, login, lecturas 200 OK) |
 
 ### Pruebas contra API en producción
 
@@ -564,6 +578,38 @@ Authorization: Bearer <admin_token>
 ```
 
 ## Changelog
+
+### PR #67 — Datos Biométricos Completos del Paciente (rama-Liz -> master)
+
+| Fix | Descripción |
+|---|---|
+| **Onboarding móvil completo** | `POST /api/Pacientes` ahora acepta y guarda fecha de nacimiento, peso (kg), estatura (cm), sexo, actividad física, diabetes (paciente y familiares) en un solo request. Retrocompatible: sigue funcionando solo con `{ nombre }`. |
+| **Nuevo campo `sexo`** | Agregado a `Biometria` en el modelo y colección `pacientes`. |
+| **PUT biometria ampliado** | `/api/Pacientes/{id}/biometria` ahora también guarda fecha de nacimiento y sexo. |
+| **GET con datos completos** | `mi-paciente`, `/{id}` y `/by-usuario/{id}` devuelven todos los datos biométricos + `codigoAccesoQr` (el perfil móvil ya puede mostrarlos). |
+| **Validación de seguridad** | Fecha de nacimiento futura rechazada (400) en POST y PUT biometría; strings con `[StringLength]`; ownership check (IDOR) intacto en todos los endpoints. |
+| **Fix en tests** | Tests de biometría dependían de mocks compartidos (contaminación); ahora son independientes y pasan en aislamiento. |
+| **Tests** | **480 tests**, 0 fallos, 0 warnings. |
+
+### PR #66 — Endurecer Rate Limiting + Smoke Tests (rama-Liz -> master)
+
+| Fix | Descripción |
+|---|---|
+| **Reglas de rate limit por endpoint** | `POST /api/Auth/refresh` 10/min, `POST /api/Auth/reset-password` 3/min, `PUT /api/Auth/cambiar-password` 3/min, `POST /api/Sensores/lectura` 60/min, `POST /api/Sensores/lectura-batch` 10/min. |
+| **Smoke tests** | Nuevo proyecto `NonFunctionalTests`: `/health` 200 healthy, `login-web` 200 con token, `Sensores/lectura` 200. |
+| **Fix warning CS1998** | `MercadoPagoPaymentGateway.VerifyWebhookSignatureAsync` convertido a síncrono (0 warnings). |
+| **Tests** | 473 tests, 0 fallos, 0 warnings. |
+
+### PR #65 — Pagos Reales Stripe + Mercado Pago con Webhooks Seguros y Precios MXN (rama-Liz -> master)
+
+| Fix | Descripción |
+|---|---|
+| **Gateways reales** | `StripePaymentGateway` y `MercadoPagoPaymentGateway` implementando `IPaymentGateway`, elegibles con `metodoPago` en `crear-sesion`. |
+| **Checkout real** | Creación de sesión/preferencia en Stripe y Mercado Pago, redirección al gateway, confirmación vía webhook. |
+| **Webhooks seguros** | `POST /api/Pagos/webhook/stripe` (firma HMAC de Stripe) y `POST /api/Pagos/webhook/mercadopago` (firma `ts` + `v1` verificada con `FixedTimeEquals`). Sin credenciales expuestas. |
+| **Precios MXN** | Planes y montos en pesos mexicanos (MXN). |
+| **PagosService** | Actualizado para persistir sesiones y confirmar pagos de ambos gateways. |
+| **Tests** | Tests de integración para ambos gateways y webhooks. |
 
 ### PR #63 — Correcciones de Seguridad + Cobertura Total de Tests (rama-Liz -> master)
 
