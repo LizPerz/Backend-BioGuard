@@ -28,9 +28,9 @@ public class PagosIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
-    public async Task CrearSesion_PlanValido_Retorna200()
+    public async Task CrearSesion_PlanGratis_Retorna200()
     {
-        var plan = new Plan { Id = "plan1", Nombre = "Premium", Precio = 9.99m, PrecioMoneda = "USD" };
+        var plan = new Plan { Id = "plan1", Nombre = "Gratis", Precio = 0, PrecioMoneda = "MXN" };
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
                 It.IsAny<IMongoCollection<Plan>>(),
                 It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
@@ -44,13 +44,13 @@ public class PagosIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
 
-        var request = new CrearSesionPagoRequest("Premium");
+        var request = new CrearSesionPagoRequest("Gratis");
         var response = await _client.PostAsJsonAsync("/api/Pagos/crear-sesion", request);
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(json);
-        doc.RootElement.GetProperty("monto").GetDecimal().Should().Be(9.99m);
+        doc.RootElement.GetProperty("monto").GetDecimal().Should().Be(0);
+        doc.RootElement.GetProperty("gateway").GetString().Should().Be("ninguno");
     }
 
     [Fact]

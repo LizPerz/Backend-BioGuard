@@ -17,14 +17,15 @@ public class StripePaymentGateway : IPaymentGateway
     {
         _options = options.Value;
         _logger = logger;
-        StripeConfiguration.ApiKey = _options.SecretKey;
     }
 
     public async Task<PaymentSessionResult> CreateCheckoutSessionAsync(string usuarioId, PlanModel plan, string successUrl, string cancelUrl)
     {
         try
         {
-            var options = new SessionCreateOptions
+            StripeConfiguration.ApiKey = _options.SecretKey;
+
+            var sessionOptions = new SessionCreateOptions
             {
                 CustomerEmail = null,
                 ClientReferenceId = usuarioId,
@@ -34,7 +35,25 @@ public class StripePaymentGateway : IPaymentGateway
                     { "plan_id", plan.Id },
                     { "plan_nombre", plan.Nombre }
                 },
-                LineItems = new List<SessionLineItemOptions>
+                Mode = plan.Precio > 0 ? "subscription" : "payment",
+                SuccessUrl = successUrl,
+                CancelUrl = cancelUrl
+            };
+
+            if (!string.IsNullOrEmpty(plan.StripePriceId))
+            {
+                sessionOptions.LineItems = new List<SessionLineItemOptions>
+                {
+                    new SessionLineItemOptions
+                    {
+                        Price = plan.StripePriceId,
+                        Quantity = 1
+                    }
+                };
+            }
+            else
+            {
+                sessionOptions.LineItems = new List<SessionLineItemOptions>
                 {
                     new SessionLineItemOptions
                     {
@@ -53,14 +72,11 @@ public class StripePaymentGateway : IPaymentGateway
                         },
                         Quantity = 1
                     }
-                },
-                Mode = plan.Precio > 0 ? "subscription" : "payment",
-                SuccessUrl = successUrl,
-                CancelUrl = cancelUrl
-            };
+                };
+            }
 
             var service = new SessionService();
-            var session = await service.CreateAsync(options);
+            var session = await service.CreateAsync(sessionOptions);
 
             _logger.LogInformation("Stripe checkout session created: {SessionId}", session.Id);
             return new PaymentSessionResult(true, session.Id, session.Url, session.SubscriptionId, null);
@@ -121,6 +137,7 @@ public class StripePaymentGateway : IPaymentGateway
     {
         try
         {
+            StripeConfiguration.ApiKey = _options.SecretKey;
             var service = new SubscriptionService();
             await service.CancelAsync(subscriptionId);
             _logger.LogInformation("Stripe subscription cancelled: {SubscriptionId}", subscriptionId);

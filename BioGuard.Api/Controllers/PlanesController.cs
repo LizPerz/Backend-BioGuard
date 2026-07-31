@@ -163,14 +163,14 @@ public class PlanesController : ControllerBase
             },
             new()
             {
-                Nombre = "Familiar", Precio = 5m, PrecioMoneda = "MXN",
+                Nombre = "Familiar", Precio = 1m, PrecioMoneda = "MXN",
                 LimitePacientes = 1, LimiteCuidadores = 3, DiasHistorial = 30,
                 GpsContinuo = true, AiConsole = false, Activo = true, Orden = 2,
                 Descripcion = "Plan familiar con GPS y hasta 3 cuidadores"
             },
             new()
             {
-                Nombre = "Pro", Precio = 10m, PrecioMoneda = "MXN",
+                Nombre = "Pro", Precio = 2m, PrecioMoneda = "MXN",
                 LimitePacientes = 1, LimiteCuidadores = 6, DiasHistorial = 90,
                 GpsContinuo = true, AiConsole = true, Activo = true, Orden = 3,
                 Descripcion = "Plan profesional con AI Console y funciones avanzadas"
@@ -197,8 +197,8 @@ public class PlanesController : ControllerBase
         var planUpdates = new Dictionary<string, (decimal Precio, int Cuidadores, string Desc)>
         {
             ["Gratis"] = (0m, 1, "Plan básico con funciones limitadas"),
-            ["Familiar"] = (5m, 3, "Plan familiar con GPS y hasta 3 cuidadores"),
-            ["Pro"] = (10m, 6, "Plan profesional con AI Console y funciones avanzadas")
+            ["Familiar"] = (1m, 3, "Plan familiar con GPS y hasta 3 cuidadores"),
+            ["Pro"] = (2m, 6, "Plan profesional con AI Console y funciones avanzadas")
         };
 
         var updated = 0;

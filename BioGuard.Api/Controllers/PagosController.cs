@@ -7,10 +7,6 @@ using BioGuard.Api.DTOs;
 
 namespace BioGuard.Api.Controllers;
 
-/// <summary>
-/// MÓDULO 2: Facturación y Pagos
-/// ENDPOINT WEB
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -25,20 +21,14 @@ public class PagosController : ControllerBase
         _logger = logger;
     }
 
-    // ── Sesiones de pago ──────────────────────────────────────
-
-    /// <summary>
-    /// POST /api/Pagos/crear-sesion [WEB]
-    /// MÓDULO 2: Crear sesión de pago en Stripe/PayPal
-    /// </summary>
     [HttpPost("crear-sesion")]
     public async Task<IActionResult> CrearSesion([FromBody] CrearSesionPagoRequest request)
     {
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        _logger.LogInformation("Creating payment session for user {UsuarioId}, plan {PlanNombre}", usuarioId, request.PlanNombre);
-        var pago = await _pagosService.CrearSesionAsync(usuarioId, request.PlanNombre);
+        _logger.LogInformation("Creating payment session for user {UsuarioId}, plan {PlanNombre}, method {MetodoPago}", usuarioId, request.PlanNombre, request.MetodoPago ?? "stripe");
+        var pago = await _pagosService.CrearSesionAsync(usuarioId, request.PlanNombre, request.MetodoPago);
         if (pago == null)
         {
             _logger.LogWarning("Invalid plan {PlanNombre} for payment session by user {UsuarioId}", request.PlanNombre, usuarioId);
@@ -48,19 +38,14 @@ public class PagosController : ControllerBase
         return Ok(new
         {
             PagoId = pago.Id,
-            pago.StripeSessionId,
+            SessionId = pago.StripeSessionId ?? pago.MercadoPagoPreferenceId,
+            pago.Gateway,
             pago.Monto,
             pago.Moneda,
             message = "Sesión de pago creada"
         });
     }
 
-    // ── Historial ─────────────────────────────────────────────
-
-    /// <summary>
-    /// GET /api/Pagos/historial [WEB]
-    /// MÓDULO 2: Historial de pagos del usuario
-    /// </summary>
     [HttpGet("historial")]
     public async Task<IActionResult> Historial()
     {
@@ -74,10 +59,6 @@ public class PagosController : ControllerBase
         return Ok(response);
     }
 
-    /// <summary>
-    /// GET /api/Pagos/{id}/recibo [WEB]
-    /// MÓDULO 2: Descargar recibo/factura PDF
-    /// </summary>
     [HttpGet("{id}/recibo")]
     public async Task<IActionResult> Recibo(string id)
     {
@@ -110,12 +91,6 @@ public class PagosController : ControllerBase
         });
     }
 
-    // ── Cancelación ───────────────────────────────────────────
-
-    /// <summary>
-    /// POST /api/Pagos/cancelar [WEB]
-    /// MÓDULO 2: Cancelar suscripción activa
-    /// </summary>
     [HttpPost("cancelar")]
     public async Task<IActionResult> Cancelar()
     {
@@ -130,5 +105,61 @@ public class PagosController : ControllerBase
             return BadRequest(new { message = "No hay suscripción activa" });
         }
         return Ok(new { message = "Suscripción cancelada" });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("webhook/stripe")]
+    public async Task<IActionResult> WebhookStripe()
+    {
+        var signature = Request.Headers["Stripe-Signature"].FirstOrDefault();
+        if (string.IsNullOrEmpty(signature))
+        {
+            _logger.LogWarning("Stripe webhook received without signature");
+            return BadRequest(new { message = "Missing Stripe-Signature header" });
+        }
+
+        string rawBody;
+        using (var reader = new System.IO.StreamReader(Request.Body, System.Text.Encoding.UTF8))
+        {
+            rawBody = await reader.ReadToEndAsync();
+        }
+
+        var result = await _pagosService.ProcesarWebhookStripeAsync(rawBody, signature);
+        if (!result)
+        {
+            _logger.LogWarning("Stripe webhook processing failed");
+            return StatusCode(500, new { message = "Webhook processing failed" });
+        }
+
+        _logger.LogInformation("Stripe webhook processed successfully");
+        return Ok(new { received = true });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("webhook/mercadopago")]
+    public async Task<IActionResult> WebhookMercadoPago()
+    {
+        var signature = Request.Headers["x-signature"].FirstOrDefault();
+        if (string.IsNullOrEmpty(signature))
+        {
+            _logger.LogWarning("Mercado Pago webhook received without signature");
+            return BadRequest(new { message = "Missing x-signature header" });
+        }
+
+        string rawBody;
+        using (var reader = new System.IO.StreamReader(Request.Body, System.Text.Encoding.UTF8))
+        {
+            rawBody = await reader.ReadToEndAsync();
+        }
+
+        var result = await _pagosService.ProcesarWebhookMercadoPagoAsync(rawBody, signature);
+        if (!result)
+        {
+            _logger.LogWarning("Mercado Pago webhook processing failed");
+            return StatusCode(500, new { message = "Webhook processing failed" });
+        }
+
+        _logger.LogInformation("Mercado Pago webhook processed successfully");
+        return Ok(new { received = true });
     }
 }
