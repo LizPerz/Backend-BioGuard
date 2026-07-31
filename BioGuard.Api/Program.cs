@@ -149,6 +149,36 @@ builder.Services.Configure<IpRateLimitOptions>(options =>
             Endpoint = "post:/api/Auth/forgot-password",
             Period = "1m",
             Limit = 3
+        },
+        new RateLimitRule
+        {
+            Endpoint = "post:/api/Auth/refresh",
+            Period = "1m",
+            Limit = 10
+        },
+        new RateLimitRule
+        {
+            Endpoint = "post:/api/Auth/reset-password",
+            Period = "1m",
+            Limit = 3
+        },
+        new RateLimitRule
+        {
+            Endpoint = "put:/api/Auth/cambiar-password",
+            Period = "1m",
+            Limit = 3
+        },
+        new RateLimitRule
+        {
+            Endpoint = "post:/api/Sensores/lectura",
+            Period = "1m",
+            Limit = 60
+        },
+        new RateLimitRule
+        {
+            Endpoint = "post:/api/Sensores/lectura-batch",
+            Period = "1m",
+            Limit = 10
         }
     };
 });

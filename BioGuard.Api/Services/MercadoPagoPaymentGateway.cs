@@ -96,14 +96,14 @@ public class MercadoPagoPaymentGateway : IPaymentGateway
         }
     }
 
-    public async Task<bool> VerifyWebhookSignatureAsync(string payload, string signatureHeader)
+    public Task<bool> VerifyWebhookSignatureAsync(string payload, string signatureHeader)
     {
         try
         {
             if (string.IsNullOrEmpty(signatureHeader) || string.IsNullOrEmpty(_options.ClientSecret))
             {
                 _logger.LogWarning("Mercado Pago webhook signature verification skipped: missing header or ClientSecret");
-                return false;
+                return Task.FromResult(false);
             }
 
             var parts = signatureHeader.Split(',')
@@ -112,7 +112,7 @@ public class MercadoPagoPaymentGateway : IPaymentGateway
                 .ToDictionary(p => p[0].Trim(), p => p[1].Trim());
 
             if (!parts.TryGetValue("ts", out var ts) || !parts.TryGetValue("v1", out var v1))
-                return false;
+                return Task.FromResult(false);
 
             var dataId = "";
             using var doc = JsonDocument.Parse(payload);
@@ -131,12 +131,12 @@ public class MercadoPagoPaymentGateway : IPaymentGateway
                 Encoding.UTF8.GetBytes(v1));
 
             _logger.LogInformation("Mercado Pago webhook signature valid: {IsValid}", isValid);
-            return isValid;
+            return Task.FromResult(isValid);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Mercado Pago webhook signature verification failed");
-            return false;
+            return Task.FromResult(false);
         }
     }
 
