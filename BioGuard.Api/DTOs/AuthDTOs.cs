@@ -135,7 +135,8 @@ public record CambiarCorreoRequest(
 // ── Pagos ─────────────────────────────────────────────────
 
 public record CrearSesionPagoRequest(
-    [Required] string PlanNombre);
+    [Required] string PlanNombre,
+    string? MetodoPago = null);
 
 public record PagoResponse(
     string Id, decimal Monto, string Moneda, string Estado,

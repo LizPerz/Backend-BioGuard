@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 using MongoDB.Driver;
 using BioGuard.Api.Config;
@@ -32,7 +34,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<BioGuard.Api.Pr
             if (configDescriptor != null) services.Remove(configDescriptor);
 
             MockDbContext.Setup(db => db.Planes).Returns(new Mock<IMongoCollection<Plan>>().Object);
-            MockDbContext.Setup(db => db.UsuariosWeb).Returns(new Mock<IMongoCollection<UsuarioWeb>>().Object);
+            var mockUsuariosWeb = new Mock<IMongoCollection<UsuarioWeb>>();
+            mockUsuariosWeb.Setup(c => c.UpdateOneAsync(
+                    It.IsAny<FilterDefinition<UsuarioWeb>>(),
+                    It.IsAny<UpdateDefinition<UsuarioWeb>>(),
+                    It.IsAny<UpdateOptions>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Mock<UpdateResult>().Object);
+            MockDbContext.Setup(db => db.UsuariosWeb).Returns(mockUsuariosWeb.Object);
             MockDbContext.Setup(db => db.Pacientes).Returns(new Mock<IMongoCollection<Paciente>>().Object);
             MockDbContext.Setup(db => db.Cuidadores).Returns(new Mock<IMongoCollection<Cuidador>>().Object);
             MockDbContext.Setup(db => db.Dispositivos).Returns(new Mock<IMongoCollection<Dispositivo>>().Object);
@@ -68,6 +77,31 @@ public class CustomWebApplicationFactory : WebApplicationFactory<BioGuard.Api.Pr
                     It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
                 .ReturnsAsync(true);
             services.AddSingleton(mockEmailService.Object);
+
+            // Replace real payment gateways with mocks for integration tests
+            var stripeDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(StripePaymentGateway));
+            if (stripeDescriptor != null) services.Remove(stripeDescriptor);
+            var mpDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(MercadoPagoPaymentGateway));
+            if (mpDescriptor != null) services.Remove(mpDescriptor);
+            var factoryDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(PaymentGatewayFactory));
+            if (factoryDescriptor != null) services.Remove(factoryDescriptor);
+
+            var mockStripeOptions = new Mock<IOptions<StripeOptions>>();
+            mockStripeOptions.Setup(o => o.Value).Returns(new StripeOptions());
+            var mockStripeLogger = new Mock<ILogger<StripePaymentGateway>>();
+            services.AddSingleton(new StripePaymentGateway(mockStripeOptions.Object, mockStripeLogger.Object));
+
+            var mockMpOptions = new Mock<IOptions<MercadoPagoOptions>>();
+            mockMpOptions.Setup(o => o.Value).Returns(new MercadoPagoOptions());
+            var mockMpLogger = new Mock<ILogger<MercadoPagoPaymentGateway>>();
+            services.AddSingleton(new MercadoPagoPaymentGateway(mockMpOptions.Object, mockMpLogger.Object, new HttpClient()));
+
+            services.AddSingleton(sp =>
+            {
+                var stripe = sp.GetRequiredService<StripePaymentGateway>();
+                var mp = sp.GetRequiredService<MercadoPagoPaymentGateway>();
+                return new PaymentGatewayFactory(stripe, mp);
+            });
 
             services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
             {

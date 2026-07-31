@@ -29,6 +29,12 @@ public class Pago
     [BsonElement("stripe_customer_id")]
     public string? StripeCustomerId { get; set; }
 
+    [BsonElement("mercado_pago_preference_id")]
+    public string? MercadoPagoPreferenceId { get; set; }
+
+    [BsonElement("gateway")]
+    public string Gateway { get; set; } = "stripe";
+
     [BsonElement("estado")]
     public string Estado { get; set; } = "pendiente";
 

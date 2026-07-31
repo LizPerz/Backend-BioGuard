@@ -170,6 +170,7 @@ builder.Services.AddSignalR();
 // =============================================
 builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection("Stripe"));
 builder.Services.Configure<PayPalOptions>(builder.Configuration.GetSection("PayPal"));
+builder.Services.Configure<MercadoPagoOptions>(builder.Configuration.GetSection("MercadoPago"));
 builder.Services.Configure<FirebaseOptions>(builder.Configuration.GetSection("Firebase"));
 builder.Services.Configure<ImgBbOptions>(builder.Configuration.GetSection("ImgBB"));
 
@@ -196,7 +197,9 @@ builder.Services.AddScoped<IPacienteAccessService, PacienteAccessService>();
 builder.Services.AddScoped<IPlanLimiteService, PlanLimiteService>();
 builder.Services.AddScoped<IPushNotificationService, FirebasePushNotificationService>();
 builder.Services.AddHttpClient<IImageStorageService, ImgBbImageStorageService>();
-// IPaymentGateway registrations removed - PagosService manages payments internally without gateway abstraction
+builder.Services.AddScoped<StripePaymentGateway>();
+builder.Services.AddHttpClient<MercadoPagoPaymentGateway>();
+builder.Services.AddScoped<PaymentGatewayFactory>();
 
 // =============================================
 // CONTROLLERS + SWAGGER
@@ -367,10 +370,8 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
             var planes = new List<Plan>
             {
                 new() { Nombre = "Gratis", Precio = 0, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 1, DiasHistorial = 7, GpsContinuo = false, AiConsole = false, Activo = true, Orden = 1, Descripcion = "Plan gratuito con 1 cuidador, 7 días de historial" },
-                new() { Nombre = "Plus", Precio = 129, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 2, DiasHistorial = 30, GpsContinuo = false, AiConsole = false, Activo = true, Orden = 2, Descripcion = "2 cuidadores, 30 días de historial, alertas básicas" },
-                new() { Nombre = "Care", Precio = 229, PrecioMoneda = "MXN", LimitePacientes = 2, LimiteCuidadores = 3, DiasHistorial = 90, GpsContinuo = true, AiConsole = false, Activo = true, Orden = 3, Descripcion = "3 cuidadores, 90 días de historial, GPS continuo, Guardián Nocturno" },
-                new() { Nombre = "Family", Precio = 349, PrecioMoneda = "MXN", LimitePacientes = 4, LimiteCuidadores = 5, DiasHistorial = 180, GpsContinuo = true, AiConsole = true, Activo = true, Orden = 4, Descripcion = "5 cuidadores, 180 días de historial, Consola de IA, exportación de reportes" },
-                new() { Nombre = "Pro Salud", Precio = 499, PrecioMoneda = "MXN", LimitePacientes = 10, LimiteCuidadores = 10, DiasHistorial = 365, GpsContinuo = true, AiConsole = true, Activo = true, Orden = 5, Descripcion = "Todo incluido: 10 cuidadores, 1 año de historial, prioridad en soporte" }
+                new() { Nombre = "Familiar", Precio = 1, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 3, DiasHistorial = 30, GpsContinuo = true, AiConsole = false, Activo = true, Orden = 2, Descripcion = "Plan familiar con GPS y hasta 3 cuidadores" },
+                new() { Nombre = "Pro", Precio = 2, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 6, DiasHistorial = 90, GpsContinuo = true, AiConsole = true, Activo = true, Orden = 3, Descripcion = "Plan profesional con AI Console, GPS continuo y hasta 6 cuidadores" }
             };
             await SafeInsertMany(db.Planes, planes, "planes");
             existingPlan = await db.FindFirstOrDefaultAsync(db.Planes, p => p.Nombre == "Gratis");
