@@ -1,0 +1,44 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+*.nupkg
+*.snupkg
+.vs/
+*.DotSettings.user
+
+## NuGet
+packages/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+
+## Build
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
+artifacts/
+
+## IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+## OS
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+## Secrets - NUNCA subir
+appsettings.Development.json
+appsettings.*.Local.json
+*.env
+.env.*

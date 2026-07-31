@@ -1,0 +1,52 @@
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/BioGuard.Api"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "security"
+    reviewers:
+      - "lizperz"
+    assignees:
+      - "lizperz"
+
+  - package-ecosystem: "nuget"
+    directory: "/Test1BioGuard"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    reviewers:
+      - "lizperz"
+    assignees:
+      - "lizperz"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "ci"
+      - "security"
+    reviewers:
+      - "lizperz"
+    assignees:
+      - "lizperz"
+
+  - package-ecosystem: "docker"
+    directory: "/BioGuard.Api"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "security"
+    reviewers:
+      - "lizperz"
+    assignees:
+      - "lizperz"

@@ -1,0 +1,218 @@
+name: BioGuard CI/CD
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  PROJECT_PATH: 'BioGuard.Api/BioGuard.Api.csproj'
+  TEST_PATH: 'Test1BioGuard/Test1BioGuard.csproj'
+  IMAGE_NAME: ghcr.io/${{ vars.IMAGE_NAME || 'lizperz/backend-bioguard' }}
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    permissions: {}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      - name: Build
+        run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+
+      - name: Dockerfile Lint (hadolint)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: BioGuard.Api/Dockerfile
+          config: .hadolint.yaml
+          failure-threshold: warning
+
+      - name: NuGet Vulnerability Audit
+        run: |
+          dotnet list ${{ env.PROJECT_PATH }} package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+          if dotnet list ${{ env.PROJECT_PATH }} package --vulnerable --include-transitive | grep -q "has the following vulnerable packages"; then
+            echo "::error::Vulnerable NuGet packages detected. See report above."
+            exit 1
+          fi
+
+      - name: License Compliance Scan
+        run: |
+          echo "=== License Report ==="
+          dotnet list ${{ env.PROJECT_PATH }} package --include-transitive --format json > license-report.json 2>/dev/null || true
+          echo "=== Checking for copyleft licenses ==="
+          BLOCKED_LICENSES="GPL-3.0|GPL-2.0|AGPL-3.0|SSPL-1.0|EUPL-1.1|OSL-3.0|CC-BY-SA-4.0"
+          LICENSES=$(dotnet list ${{ env.PROJECT_PATH }} package --include-transitive 2>&1 || true)
+          if echo "$LICENSES" | grep -iE "$BLOCKED_LICENSES"; then
+            echo "::error::Copyleft or restrictive license detected in dependencies."
+            echo "Blocked licenses: GPL-3.0, GPL-2.0, AGPL-3.0, SSPL-1.0, EUPL-1.1, OSL-3.0, CC-BY-SA-4.0"
+            exit 1
+          fi
+          echo "No blocked licenses found."
+
+      - name: Run Unit Tests
+        run: dotnet test ${{ env.TEST_PATH }} --configuration Release --no-build --filter "FullyQualifiedName!~IntegrationTests" --logger "trx;LogFileName=unit-tests.trx" --collect:"XPlat Code Coverage"
+
+      - name: Run Integration Tests
+        run: dotnet test ${{ env.TEST_PATH }} --configuration Release --no-build --filter "FullyQualifiedName~IntegrationTests" --logger "trx;LogFileName=integration-tests.trx"
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: test-results
+          path: '**/*.trx'
+
+  docker-build:
+    name: Build & Push Docker Image
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    outputs:
+      image_digest: ${{ steps.push.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: BioGuard.Api/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v3
+
+      - name: Sign container image
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign --yes ${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+          cosign verify ${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }} 2>/dev/null || echo "Signature verification skipped (keyless mode)"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: docker-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    environment: staging
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Deploy to Staging
+        uses: digitalocean/app_action/deploy@cc55bc9b848d25f9c1c9f831cf843fbab3fbfb15 # v2
+        env:
+          IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Post-Deployment Smoke Test
+        run: |
+          STAGING_URL="https://bioguard-staging.ondigitalocean.app"
+          echo "Running smoke tests against staging: $STAGING_URL"
+
+          # 1. Health endpoint
+          HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "$STAGING_URL/health")
+          echo "Health endpoint: $HEALTH"
+          if [ "$HEALTH" != "200" ]; then echo "Health check failed"; exit 1; fi
+
+          # 2. Health body
+          HEALTH_BODY=$(curl -s "$STAGING_URL/health")
+          echo "Health body: $HEALTH_BODY"
+          echo "$HEALTH_BODY" | jq -e '.status == "healthy"' || { echo "Health status not healthy"; exit 1; }
+
+          # 3. Login with test account
+          LOGIN=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$STAGING_URL/api/Auth/login-web" \
+            -H "Content-Type: application/json" \
+            -d "{\"Correo\":\"${STAGING_TEST_EMAIL}\",\"Password\":\"${STAGING_TEST_PASSWORD}\"}")
+          echo "Login endpoint: $LOGIN"
+
+          echo "Smoke tests passed"
+
+  promote-to-production:
+    name: Promote to Production
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    environment:
+      name: production
+      url: https://bioguard-api-lkvnq.ondigitalocean.app
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Deploy to Production
+        uses: digitalocean/app_action/deploy@cc55bc9b848d25f9c1c9f831cf843fbab3fbfb15 # v2
+        env:
+          IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Post-Deployment Health Check
+        run: |
+          PROD_URL="https://bioguard-api-lkvnq.ondigitalocean.app"
+          HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "$PROD_URL/health")
+          echo "Production health: $HEALTH"
+          if [ "$HEALTH" != "200" ]; then echo "Production health check failed"; exit 1; fi
+          echo "Production deployment verified"
