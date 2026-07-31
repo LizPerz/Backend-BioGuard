@@ -51,17 +51,35 @@ public record CambiarPasswordRequest(
 
 public record PacienteResponse(
     string Id, string Nombre, bool EsDiabetico,
-    bool PerfilCompletado);
+    bool PerfilCompletado,
+    DateTime? FechaNacimiento = null,
+    int Edad = 0,
+    double PesoKg = 0,
+    double EstaturaCm = 0,
+    string? Sexo = null,
+    bool FamiliaresDiabetes = false,
+    string? ActividadFisica = null,
+    string? CodigoAccesoQr = null);
 
 public record UpdateBiometriaRequest(
     [Range(0, 150)] int Edad,
     [Range(0.1, 500)] double PesoKg,
     [Range(20, 300)] double EstaturaCm,
     bool EsDiabetico, bool FamiliaresDiabetes,
-    [StringLength(50)] string ActividadFisica);
+    [StringLength(50)] string ActividadFisica,
+    DateTime? FechaNacimiento = null,
+    [StringLength(20)] string? Sexo = null);
 
 public record CrearPacienteRequest(
-    [Required] [StringLength(200)] string Nombre);
+    [Required] [StringLength(200)] string Nombre,
+    DateTime? FechaNacimiento = null,
+    int Edad = 0,
+    double PesoKg = 0,
+    double EstaturaCm = 0,
+    [StringLength(20)] string? Sexo = null,
+    bool EsDiabetico = false,
+    bool FamiliaresDiabetes = false,
+    [StringLength(50)] string? ActividadFisica = null);
 public record UpdateNombreRequest(
     [Required] [StringLength(200)] string Nombre);
 

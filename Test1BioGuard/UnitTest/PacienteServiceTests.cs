@@ -95,7 +95,7 @@ public class PacienteServiceTests
             It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var result = await _service.CrearPacienteAsync(usuarioWebId, nombre);
+        var result = await _service.CrearPacienteAsync(usuarioWebId, new BioGuard.Api.DTOs.CrearPacienteRequest(nombre));
 
         result.Should().NotBeNullOrEmpty();
         result.Should().HaveLength(8);
@@ -213,7 +213,8 @@ public class PacienteServiceTests
 
         var request = new BioGuard.Api.DTOs.UpdateBiometriaRequest(
             Edad: 30, PesoKg: 75.5, EstaturaCm: 175.0,
-            EsDiabetico: false, FamiliaresDiabetes: false, ActividadFisica: "Moderada");
+            EsDiabetico: false, FamiliaresDiabetes: false, ActividadFisica: "Moderada",
+            FechaNacimiento: new DateTime(1995, 5, 15), Sexo: "M");
 
         await _service.UpdateBiometriaAsync("123456789012345678901234", request);
 
@@ -221,6 +222,67 @@ public class PacienteServiceTests
             It.IsAny<FilterDefinition<Paciente>>(),
             It.IsAny<UpdateDefinition<Paciente>>(),
             It.IsAny<UpdateOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CrearPacienteAsync_ConDatosBiometricos_PersisteTodosLosCampos()
+    {
+        _mockCollection.Setup(c => c.InsertOneAsync(
+                It.IsAny<Paciente>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var request = new BioGuard.Api.DTOs.CrearPacienteRequest(
+            Nombre: "Ana García",
+            FechaNacimiento: new DateTime(1990, 3, 10),
+            Edad: 34,
+            PesoKg: 60.5,
+            EstaturaCm: 165.0,
+            Sexo: "F",
+            EsDiabetico: true,
+            FamiliaresDiabetes: true,
+            ActividadFisica: "Moderada");
+
+        var codigo = await _service.CrearPacienteAsync("user123", request);
+
+        codigo.Should().NotBeNullOrEmpty();
+        _mockCollection.Verify(c => c.InsertOneAsync(
+            It.Is<Paciente>(p =>
+                p.Nombre == "Ana García" &&
+                p.FechaNacimiento == new DateTime(1990, 3, 10) &&
+                p.Biometria.Edad == 34 &&
+                p.Biometria.PesoKg == 60.5 &&
+                p.Biometria.EstaturaCm == 165.0 &&
+                p.Biometria.Sexo == "F" &&
+                p.Biometria.EsDiabetico == true &&
+                p.Biometria.FamiliaresDiabetes == true &&
+                p.Biometria.ActividadFisica == "Moderada" &&
+                p.PerfilCompletado == true),
+            It.IsAny<InsertOneOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CrearPacienteAsync_SoloNombre_PerfilNoCompletado()
+    {
+        _mockCollection.Setup(c => c.InsertOneAsync(
+                It.IsAny<Paciente>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var request = new BioGuard.Api.DTOs.CrearPacienteRequest(Nombre: "Solo Nombre");
+
+        await _service.CrearPacienteAsync("user123", request);
+
+        _mockCollection.Verify(c => c.InsertOneAsync(
+            It.Is<Paciente>(p =>
+                p.Nombre == "Solo Nombre" &&
+                p.PerfilCompletado == false &&
+                p.Biometria.Sexo == string.Empty),
+            It.IsAny<InsertOneOptions>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 }
