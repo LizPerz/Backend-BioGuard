@@ -42,23 +42,46 @@ public class PacienteService
                 EstaturaCm = request.EstaturaCm,
                 EsDiabetico = request.EsDiabetico,
                 FamiliaresDiabetes = request.FamiliaresDiabetes,
-                ActividadFisica = request.ActividadFisica
+                ActividadFisica = request.ActividadFisica,
+                Sexo = request.Sexo ?? string.Empty
             })
             .Set(p => p.PerfilCompletado, true);
+
+        if (request.FechaNacimiento.HasValue)
+        {
+            update = update.Set(p => p.FechaNacimiento, request.FechaNacimiento);
+        }
 
         await _db.Pacientes.UpdateOneAsync(p => p.Id == pacienteId, update);
         _logger.LogInformation("Biometrics updated for patient: {PacienteId}", pacienteId);
     }
 
-    public async Task<string> CrearPacienteAsync(string usuarioWebId, string nombre)
+    public async Task<string> CrearPacienteAsync(string usuarioWebId, CrearPacienteRequest request)
     {
         var codigo = GenerarCodigo();
+        var tieneDatosBiometricos = request.FechaNacimiento.HasValue || request.Edad > 0 ||
+            request.PesoKg > 0 || request.EstaturaCm > 0 ||
+            !string.IsNullOrWhiteSpace(request.Sexo) || request.EsDiabetico ||
+            request.FamiliaresDiabetes || !string.IsNullOrWhiteSpace(request.ActividadFisica);
+
         var paciente = new Paciente
         {
             UsuarioWebId = usuarioWebId,
             CodigoAccesoQr = codigo,
-            Nombre = nombre,
-            FechaRegistro = DateTime.UtcNow
+            Nombre = request.Nombre,
+            FechaNacimiento = request.FechaNacimiento,
+            FechaRegistro = DateTime.UtcNow,
+            PerfilCompletado = tieneDatosBiometricos,
+            Biometria = new Biometria
+            {
+                Edad = request.Edad,
+                PesoKg = request.PesoKg,
+                EstaturaCm = request.EstaturaCm,
+                EsDiabetico = request.EsDiabetico,
+                FamiliaresDiabetes = request.FamiliaresDiabetes,
+                ActividadFisica = request.ActividadFisica ?? string.Empty,
+                Sexo = request.Sexo ?? string.Empty
+            }
         };
         await _db.Pacientes.InsertOneAsync(paciente);
         _logger.LogInformation("Patient created: {PacienteId} for user: {UsuarioWebId}", paciente.Id, usuarioWebId);

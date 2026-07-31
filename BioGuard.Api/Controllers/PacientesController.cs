@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Config;
+using BioGuard.Api.Models;
 
 namespace BioGuard.Api.Controllers;
 
@@ -58,9 +59,7 @@ public class PacientesController : ControllerBase
             return NotFound(new { message = "No tiene paciente registrado" });
         }
 
-        return Ok(new PacienteResponse(
-            paciente.Id, paciente.Nombre, paciente.Biometria?.EsDiabetico ?? false,
-            paciente.PerfilCompletado));
+        return Ok(ToResponse(paciente));
     }
 
     /// <summary>
@@ -88,9 +87,7 @@ public class PacientesController : ControllerBase
             return NotFound();
         }
 
-        return Ok(new PacienteResponse(
-            paciente.Id, paciente.Nombre, paciente.Biometria?.EsDiabetico ?? false,
-            paciente.PerfilCompletado));
+        return Ok(ToResponse(paciente));
     }
 
     /// <summary>
@@ -112,9 +109,7 @@ public class PacientesController : ControllerBase
 
         _logger.LogInformation("Listing patients for user: {UserId}", usuarioWebId);
         var pacientes = await _pacienteService.GetAllByUsuarioAsync(usuarioWebId);
-        var response = pacientes.Select(p => new PacienteResponse(
-            p.Id, p.Nombre, p.Biometria?.EsDiabetico ?? false,
-            p.PerfilCompletado)).ToList();
+        var response = pacientes.Select(ToResponse).ToList();
         return Ok(response);
     }
 
@@ -131,8 +126,14 @@ public class PacientesController : ControllerBase
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        if (request.FechaNacimiento.HasValue && request.FechaNacimiento.Value.Date > DateTime.UtcNow.Date)
+        {
+            _logger.LogWarning("Rejected paciente creation with future birth date: {FechaNacimiento}", request.FechaNacimiento);
+            return BadRequest(new { message = "La fecha de nacimiento no puede ser futura" });
+        }
+
         _logger.LogInformation("Creating paciente for user: {UserId}, name: {Nombre}", usuarioId, request.Nombre);
-        var codigo = await _pacienteService.CrearPacienteAsync(usuarioId, request.Nombre);
+        var codigo = await _pacienteService.CrearPacienteAsync(usuarioId, request);
         _logger.LogInformation("Paciente created successfully for user: {UserId}", usuarioId);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         await _auditoriaService.RegistrarAsync(usuarioId, "crear", "pacientes", codigo, ip);
@@ -216,6 +217,12 @@ public class PacientesController : ControllerBase
         {
             _logger.LogWarning("Ownership check failed updating biometria - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
             return Forbid();
+        }
+
+        if (request.FechaNacimiento.HasValue && request.FechaNacimiento.Value.Date > DateTime.UtcNow.Date)
+        {
+            _logger.LogWarning("Rejected biometria update with future birth date: {FechaNacimiento}", request.FechaNacimiento);
+            return BadRequest(new { message = "La fecha de nacimiento no puede ser futura" });
         }
 
         _logger.LogInformation("Updating biometria for paciente: {PacienteId}", id);
@@ -307,5 +314,19 @@ public class PacientesController : ControllerBase
             dispositivo.FechaVinculacion
         });
     }
+
+    private static PacienteResponse ToResponse(Paciente paciente) => new(
+        paciente.Id,
+        paciente.Nombre,
+        paciente.Biometria?.EsDiabetico ?? false,
+        paciente.PerfilCompletado,
+        paciente.FechaNacimiento,
+        paciente.Biometria?.Edad ?? 0,
+        paciente.Biometria?.PesoKg ?? 0,
+        paciente.Biometria?.EstaturaCm ?? 0,
+        string.IsNullOrEmpty(paciente.Biometria?.Sexo) ? null : paciente.Biometria.Sexo,
+        paciente.Biometria?.FamiliaresDiabetes ?? false,
+        string.IsNullOrEmpty(paciente.Biometria?.ActividadFisica) ? null : paciente.Biometria.ActividadFisica,
+        paciente.CodigoAccesoQr);
 
 }

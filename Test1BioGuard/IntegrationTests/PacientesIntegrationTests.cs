@@ -332,6 +332,11 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
     {
         var pacienteId = "123456789012345678901234";
 
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = pacienteId, UsuarioWebId = "user123" });
+
         var mockResult = new Mock<UpdateResult>();
         mockResult.Setup(r => r.ModifiedCount).Returns(1);
 
@@ -405,5 +410,175 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
         var response = await _client.PutAsJsonAsync("/api/Pacientes/123456789012345678901234", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Crear_ConDatosBiometricos_Retorna200()
+    {
+        _mockPacientes.Setup(c => c.InsertOneAsync(
+                It.IsAny<Paciente>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
+
+        var request = new CrearPacienteRequest(
+            Nombre: "Ana García",
+            FechaNacimiento: new DateTime(1990, 3, 10),
+            Edad: 34,
+            PesoKg: 60.5,
+            EstaturaCm: 165.0,
+            Sexo: "F",
+            EsDiabetico: true,
+            FamiliaresDiabetes: true,
+            ActividadFisica: "Moderada");
+
+        var response = await _client.PostAsJsonAsync("/api/Pacientes", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("codigoAccesoQr").GetString().Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task Crear_FechaNacimientoFutura_Retorna400()
+    {
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
+
+        var request = new CrearPacienteRequest(
+            Nombre: "Paciente Futuro",
+            FechaNacimiento: DateTime.UtcNow.AddYears(1));
+
+        var response = await _client.PostAsJsonAsync("/api/Pacientes", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("message").GetString().Should().Contain("fecha de nacimiento");
+    }
+
+    [Fact]
+    public async Task MiPaciente_DevuelveDatosBiometricos()
+    {
+        var usuarioId = "user123";
+        var pacientes = new List<Paciente>
+        {
+            new()
+            {
+                Id = "123456789012345678901234",
+                Nombre = "Juan Perez",
+                UsuarioWebId = usuarioId,
+                CodigoAccesoQr = "ABC12345",
+                FechaNacimiento = new DateTime(1995, 5, 15),
+                Biometria = new Biometria
+                {
+                    Edad = 29,
+                    PesoKg = 75.5,
+                    EstaturaCm = 178.0,
+                    EsDiabetico = true,
+                    FamiliaresDiabetes = true,
+                    ActividadFisica = "Intensa",
+                    Sexo = "M"
+                },
+                PerfilCompletado = true
+            }
+        };
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(pacientes);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken(usuarioId));
+
+        var response = await _client.GetAsync("/api/Pacientes/mi-paciente");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("nombre").GetString().Should().Be("Juan Perez");
+        doc.RootElement.GetProperty("fechaNacimiento").GetDateTime().Should().Be(new DateTime(1995, 5, 15));
+        doc.RootElement.GetProperty("pesoKg").GetDouble().Should().Be(75.5);
+        doc.RootElement.GetProperty("estaturaCm").GetDouble().Should().Be(178.0);
+        doc.RootElement.GetProperty("sexo").GetString().Should().Be("M");
+        doc.RootElement.GetProperty("esDiabetico").GetBoolean().Should().BeTrue();
+        doc.RootElement.GetProperty("familiaresDiabetes").GetBoolean().Should().BeTrue();
+        doc.RootElement.GetProperty("actividadFisica").GetString().Should().Be("Intensa");
+        doc.RootElement.GetProperty("codigoAccesoQr").GetString().Should().Be("ABC12345");
+    }
+
+    [Fact]
+    public async Task UpdateBiometria_ConFechaNacimientoYSexo_Retorna200()
+    {
+        var pacienteId = "123456789012345678901234";
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = pacienteId, UsuarioWebId = "user123" });
+
+        var mockResult = new Mock<UpdateResult>();
+        mockResult.Setup(r => r.ModifiedCount).Returns(1);
+
+        _mockPacientes.Setup(c => c.UpdateOneAsync(
+            It.IsAny<FilterDefinition<Paciente>>(),
+            It.IsAny<UpdateDefinition<Paciente>>(),
+            It.IsAny<UpdateOptions>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResult.Object);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
+
+        var request = new UpdateBiometriaRequest(
+            Edad: 30, PesoKg: 75.5, EstaturaCm: 175.0,
+            EsDiabetico: false, FamiliaresDiabetes: false, ActividadFisica: "Moderada",
+            FechaNacimiento: new DateTime(1995, 5, 15), Sexo: "M");
+        var response = await _client.PutAsJsonAsync($"/api/Pacientes/{pacienteId}/biometria", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("message").GetString().Should().Be("Biometría actualizada");
+    }
+
+    [Fact]
+    public async Task UpdateBiometria_FechaNacimientoFutura_Retorna400()
+    {
+        var pacienteId = "123456789012345678901234";
+
+        var mockResult = new Mock<UpdateResult>();
+        mockResult.Setup(r => r.ModifiedCount).Returns(1);
+
+        _mockPacientes.Setup(c => c.UpdateOneAsync(
+            It.IsAny<FilterDefinition<Paciente>>(),
+            It.IsAny<UpdateDefinition<Paciente>>(),
+            It.IsAny<UpdateOptions>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResult.Object);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = pacienteId, UsuarioWebId = "user123" });
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
+
+        var request = new UpdateBiometriaRequest(
+            Edad: 30, PesoKg: 75.5, EstaturaCm: 175.0,
+            EsDiabetico: false, FamiliaresDiabetes: false, ActividadFisica: "Moderada",
+            FechaNacimiento: DateTime.UtcNow.AddYears(1), Sexo: "M");
+        var response = await _client.PutAsJsonAsync($"/api/Pacientes/{pacienteId}/biometria", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("message").GetString().Should().Contain("fecha de nacimiento");
     }
 }

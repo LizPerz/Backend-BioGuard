@@ -57,6 +57,9 @@ public class Biometria
 
     [BsonElement("actividad_fisica")]
     public string ActividadFisica { get; set; } = string.Empty;
+
+    [BsonElement("sexo")]
+    public string Sexo { get; set; } = string.Empty;
 }
 
 public class DispositivoInfo
