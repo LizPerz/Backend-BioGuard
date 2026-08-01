@@ -39,6 +39,7 @@ public class PagosController : ControllerBase
         {
             PagoId = pago.Id,
             SessionId = pago.StripeSessionId,
+            pago.CheckoutUrl,
             pago.Gateway,
             pago.Monto,
             pago.Moneda,

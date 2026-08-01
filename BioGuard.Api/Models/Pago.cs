@@ -26,6 +26,9 @@ public class Pago
     [BsonElement("stripe_session_id")]
     public string? StripeSessionId { get; set; }
 
+    [BsonElement("checkout_url")]
+    public string? CheckoutUrl { get; set; }
+
     [BsonElement("stripe_customer_id")]
     public string? StripeCustomerId { get; set; }
 

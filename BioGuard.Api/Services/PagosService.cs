@@ -80,6 +80,7 @@ public class PagosService
             Moneda = plan.PrecioMoneda,
             PlanId = plan.Id,
             StripeSessionId = sessionResult.SessionId,
+            CheckoutUrl = sessionResult.SessionUrl,
             Estado = "pendiente",
             FechaPago = DateTime.UtcNow,
             MetodoPago = metodo,
