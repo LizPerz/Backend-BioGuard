@@ -2,6 +2,7 @@ using MongoDB.Driver;
 using Moq;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using BioGuard.Api.Config;
 using BioGuard.Api.Services;
 using BioGuard.Api.Models;
@@ -21,7 +22,7 @@ public class PagosServiceTests
         _mockDb = new Mock<IMongoDbContext>();
         _mockPagos = new Mock<IMongoCollection<Pago>>();
         _mockPlanes = new Mock<IMongoCollection<Plan>>();
-        _mockFactory = new Mock<PaymentGatewayFactory>(null!, null!);
+        _mockFactory = new Mock<PaymentGatewayFactory>(BuildFakeStripeGateway());
         _mockUsuariosWebService = new Mock<UsuariosWebService>(_mockDb.Object, Mock.Of<ILogger<UsuariosWebService>>());
         _mockConfig = new Mock<IConfiguration>();
         var configSection = new Mock<IConfigurationSection>();
@@ -32,6 +33,13 @@ public class PagosServiceTests
         _mockDb.Setup(db => db.Planes).Returns(_mockPlanes.Object);
         var mockLogger = new Mock<ILogger<PagosService>>();
         _service = new PagosService(_mockDb.Object, mockLogger.Object, _mockFactory.Object, _mockUsuariosWebService.Object, _mockConfig.Object);
+    }
+
+    private static StripePaymentGateway BuildFakeStripeGateway()
+    {
+        var options = new Mock<IOptions<StripeOptions>>();
+        options.Setup(o => o.Value).Returns(new StripeOptions());
+        return new StripePaymentGateway(options.Object, Mock.Of<ILogger<StripePaymentGateway>>());
     }
     [Fact]
     public async Task CrearSesionAsync_PlanGratis_RetornaPagoCompletado()

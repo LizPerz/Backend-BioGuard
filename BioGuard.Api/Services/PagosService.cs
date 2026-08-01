@@ -55,7 +55,12 @@ public class PagosService
         }
 
         var metodo = !string.IsNullOrWhiteSpace(metodoPago) ? metodoPago : "stripe";
-        var gateway = _gatewayFactory.GetGateway(metodo);
+        if (!string.Equals(metodo, "stripe", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Método de pago no soportado: {Metodo}", metodo);
+            return null;
+        }
+        var gateway = _gatewayFactory.GetGateway("stripe");
 
         var configSection = _configuration.GetSection("CallbackUrls");
         var successUrl = configSection["SuccessUrl"] ?? "http://localhost:3000/pago/exito";
@@ -74,8 +79,7 @@ public class PagosService
             Monto = plan.Precio,
             Moneda = plan.PrecioMoneda,
             PlanId = plan.Id,
-            StripeSessionId = metodo == "stripe" ? sessionResult.SessionId : null,
-            MercadoPagoPreferenceId = metodo == "mercadopago" ? sessionResult.SessionId : null,
+            StripeSessionId = sessionResult.SessionId,
             Estado = "pendiente",
             FechaPago = DateTime.UtcNow,
             MetodoPago = metodo,
@@ -106,30 +110,9 @@ public class PagosService
         return await ConfirmarPagoAsync(evento.SessionId, "stripe", evento.SubscriptionId, evento.PlanId);
     }
 
-    public async Task<bool> ProcesarWebhookMercadoPagoAsync(string rawBody, string signature)
-    {
-        var gateway = _gatewayFactory.GetGateway("mercadopago");
-        if (!await gateway.VerifyWebhookSignatureAsync(rawBody, signature))
-        {
-            _logger.LogWarning("Mercado Pago webhook signature verification failed");
-            return false;
-        }
-
-        var evento = await gateway.ParseWebhookEventAsync(rawBody, signature);
-        if (evento.Status != "completado" || string.IsNullOrEmpty(evento.SessionId))
-        {
-            _logger.LogInformation("Mercado Pago webhook ignorado: {Type} -> {Status}", evento.Type, evento.Status);
-            return true;
-        }
-
-        return await ConfirmarPagoAsync(evento.SessionId, "mercadopago", evento.SubscriptionId, evento.PlanId);
-    }
-
     private async Task<bool> ConfirmarPagoAsync(string sessionId, string gateway, string? subscriptionId, string? planId)
     {
-        var filter = gateway == "stripe"
-            ? Builders<Pago>.Filter.Eq(p => p.StripeSessionId, sessionId)
-            : Builders<Pago>.Filter.Eq(p => p.MercadoPagoPreferenceId, sessionId);
+        var filter = Builders<Pago>.Filter.Eq(p => p.StripeSessionId, sessionId);
 
         var pago = await _db.FindFirstOrDefaultAsync(_db.Pagos, filter);
         if (pago == null)
@@ -195,8 +178,7 @@ public class PagosService
         }
 
         var gateway = _gatewayFactory.GetGateway(pago.Gateway);
-        var gatewayOk = await gateway.CancelSubscriptionAsync(
-            pago.StripeSessionId ?? pago.MercadoPagoPreferenceId ?? "");
+        var gatewayOk = await gateway.CancelSubscriptionAsync(pago.StripeSessionId ?? "");
 
         if (!gatewayOk)
         {

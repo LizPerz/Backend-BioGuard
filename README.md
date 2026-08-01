@@ -120,8 +120,8 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 
 ### Módulo 9: Pagos y Planes
 - 3 planes: Gratis ($0), Familiar ($5 MXN), Pro ($10 MXN)
-- **Pagos reales con Stripe y Mercado Pago**: creación de sesión de checkout (especificando `metodoPago: "stripe" | "mercadopago"`), redirección al gateway, confirmación vía webhook seguro (firma HMAC / header de firma)
-- Webhooks: `POST /api/Pagos/webhook/stripe` y `POST /api/Pagos/webhook/mercadopago` (verificación de firma, idempotencia, sin exponer secretos)
+- **Pagos reales con Stripe**: creación de sesión de checkout (con `metodoPago: "stripe"`), redirección al gateway, confirmación vía webhook seguro (firma HMAC de Stripe)
+- Webhook: `POST /api/Pagos/webhook/stripe` (verificación de firma, idempotencia, sin exponer secretos)
 - Historial de pagos y recibos
 - Cancelación de pagos/preferencias
 
@@ -405,11 +405,10 @@ BioGuard.Api/
 | Método | Ruta | Descripción | Auth |
 |---|---|---|---|
 | GET | `/api/Pagos/historial` | Historial de pagos | JWT |
-| POST | `/api/Pagos/crear-sesion` | Crear sesión de pago (Stripe o Mercado Pago) | JWT |
+| POST | `/api/Pagos/crear-sesion` | Crear sesión de pago (Stripe) | JWT |
 | GET | `/api/Pagos/{id}/recibo` | Recibo de pago | JWT |
 | POST | `/api/Pagos/cancelar` | Cancelar pago | JWT |
 | POST | `/api/Pagos/webhook/stripe` | Webhook Stripe (firma verificada) | Firma HMAC |
-| POST | `/api/Pagos/webhook/mercadopago` | Webhook Mercado Pago (firma verificada) | Firma HMAC |
 
 ### Planes (7 endpoints)
 

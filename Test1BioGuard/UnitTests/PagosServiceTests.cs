@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.Models;
@@ -22,7 +23,7 @@ public class PagosServiceTests
     {
         _mockDb = new Mock<IMongoDbContext>();
         _mockLogger = new Mock<ILogger<PagosService>>();
-        _mockFactory = new Mock<PaymentGatewayFactory>(null!, null!);
+        _mockFactory = new Mock<PaymentGatewayFactory>(BuildFakeStripeGateway());
         _mockUsuariosWebService = new Mock<UsuariosWebService>(_mockDb.Object, Mock.Of<ILogger<UsuariosWebService>>());
         _mockPagos = new Mock<IMongoCollection<Pago>>();
         _mockPlanes = new Mock<IMongoCollection<Plan>>();
@@ -34,6 +35,13 @@ public class PagosServiceTests
         _mockDb.Setup(db => db.Pagos).Returns(_mockPagos.Object);
         _mockDb.Setup(db => db.Planes).Returns(_mockPlanes.Object);
         _service = new PagosService(_mockDb.Object, _mockLogger.Object, _mockFactory.Object, _mockUsuariosWebService.Object, _mockConfig.Object);
+    }
+
+    private static StripePaymentGateway BuildFakeStripeGateway()
+    {
+        var options = new Mock<IOptions<StripeOptions>>();
+        options.Setup(o => o.Value).Returns(new StripeOptions());
+        return new StripePaymentGateway(options.Object, Mock.Of<ILogger<StripePaymentGateway>>());
     }
     [Fact]
     public async Task CrearSesion_PlanGratis_SaltaPasarela()
@@ -94,26 +102,15 @@ public class PagosServiceTests
         result.Monto.Should().Be(1);
     }
     [Fact]
-    public async Task CrearSesion_PlanPagoConMercadoPago_RetornaPago()
+    public async Task CrearSesion_PlanPagoConMetodoInvalido_RetornaNull()
     {
         var plan = new Plan { Id = "plan4", Nombre = "Pro", Precio = 2, PrecioMoneda = "MXN" };
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
                 It.IsAny<IMongoCollection<Plan>>(),
                 It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
             .ReturnsAsync(plan);
-        var mockGateway = new Mock<IPaymentGateway>();
-        mockGateway.Setup(g => g.CreateCheckoutSessionAsync(
-                "user123", plan, It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(new PaymentSessionResult(true, "mp_pref_456", "https://www.mercadopago.com.mx/checkout", null, null));
-        _mockFactory.Setup(f => f.GetGateway("mercadopago")).Returns(mockGateway.Object);
-        _mockPagos.Setup(c => c.InsertOneAsync(
-            It.IsAny<Pago>(), It.IsAny<InsertOneOptions>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
         var result = await _service.CrearSesionAsync("user123", "Pro", "mercadopago");
-        result.Should().NotBeNull();
-        result!.Estado.Should().Be("pendiente");
-        result.MercadoPagoPreferenceId.Should().Be("mp_pref_456");
-        result.Gateway.Should().Be("mercadopago");
+        result.Should().BeNull();
     }
     [Fact]
     public async Task WebhookStripe_PagoCompletado_ConfirmaPago()
@@ -141,34 +138,6 @@ public class PagosServiceTests
             .ReturnsAsync(new PaymentWebhookEvent("evt1", "checkout.session.completed", "cs_test_ok", "sub_test", "cus_test", "completado", "plan1"));
         _mockFactory.Setup(f => f.GetGateway("stripe")).Returns(mockGateway.Object);
         var result = await _service.ProcesarWebhookStripeAsync("{}", "test_sig");
-        result.Should().BeTrue();
-    }
-    [Fact]
-    public async Task WebhookMercadoPago_PagoCompletado_ConfirmaPago()
-    {
-        var pago = new Pago { Id = "pago2", MercadoPagoPreferenceId = "mp_test_ok", Estado = "pendiente", UsuarioWebId = "user123", PlanId = "plan2", Gateway = "mercadopago" };
-        var plan = new Plan { Id = "plan2", Nombre = "Pro", Precio = 2 };
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                It.IsAny<IMongoCollection<Pago>>(),
-                It.IsAny<FilterDefinition<Pago>>(),
-                It.IsAny<SortDefinition<Pago>?>()))
-            .ReturnsAsync(pago);
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                It.IsAny<IMongoCollection<Plan>>(),
-                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
-            .ReturnsAsync(plan);
-        _mockPagos.Setup(c => c.UpdateOneAsync(
-            It.IsAny<FilterDefinition<Pago>>(),
-            It.IsAny<UpdateDefinition<Pago>>(),
-            It.IsAny<UpdateOptions>(),
-            It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Mock<UpdateResult>().Object);
-        var mockGateway = new Mock<IPaymentGateway>();
-        mockGateway.Setup(g => g.VerifyWebhookSignatureAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(true);
-        mockGateway.Setup(g => g.ParseWebhookEventAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(new PaymentWebhookEvent("evt2", "payment.approved", "mp_test_ok", null, null, "completado", "plan2"));
-        _mockFactory.Setup(f => f.GetGateway("mercadopago")).Returns(mockGateway.Object);
-        var result = await _service.ProcesarWebhookMercadoPagoAsync("{}", "test_sig");
         result.Should().BeTrue();
     }
 }
