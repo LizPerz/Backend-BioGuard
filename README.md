@@ -57,7 +57,7 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 | CI/CD | GitHub Actions | |
 | Deploy | DigitalOcean App Platform | |
 | API Docs | Swagger / OpenAPI | |
-| Tests | xUnit + FluentAssertions | 480 tests |
+| Tests | xUnit + FluentAssertions | 483 tests |
 
 ## Funcionalidades
 
@@ -119,11 +119,14 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 - Métricas de modelos
 
 ### Módulo 9: Pagos y Planes
-- 3 planes: Gratis ($0), Familiar ($5 MXN), Pro ($10 MXN)
-- **Pagos reales con Stripe**: creación de sesión de checkout (con `metodoPago: "stripe"`), redirección al gateway, confirmación vía webhook seguro (firma HMAC de Stripe)
-- Webhook: `POST /api/Pagos/webhook/stripe` (verificación de firma, idempotencia, sin exponer secretos)
+- 3 planes: Gratis ($0), Familiar ($1 MXN), Pro ($2 MXN) — suscripciones mensuales
+- **Pagos reales con Stripe**: `POST /api/Pagos/crear-sesion` crea la sesión de checkout y devuelve `checkoutUrl`. **Importante:** el frontend debe redirigir a `checkoutUrl` tal cual — la URL de Stripe lleva un fragmento cifrado que no se puede reconstruir con el `sessionId`
+- Confirmación vía **webhook seguro** de Stripe (firma HMAC, tolerante a `api_version`, idempotente, sin exponer secretos)
+- Webhook: `POST /api/Pagos/webhook/stripe` (solo lo invoca Stripe, no requiere JWT)
+- Solo `metodoPago: "stripe"` (Mercado Pago eliminado); cualquier otro valor responde 400
+- `plan.StripePriceId` (`stripe_price_id` en MongoDB) define el precio de Stripe; si falta, se crea automáticamente
 - Historial de pagos y recibos
-- Cancelación de pagos/preferencias
+- Cancelación de suscripción activa
 
 ### Módulo 10: Web Dashboard
 - Perfil de usuario con edición
@@ -400,15 +403,15 @@ BioGuard.Api/
 | POST | `/api/ML/reentrenar` | Re-entrenar modelo | JWT |
 | POST | `/api/ML/diagnosticar` | Diagnóstico puntual | JWT |
 
-### Pagos (6 endpoints)
+### Pagos (5 endpoints)
 
 | Método | Ruta | Descripción | Auth |
 |---|---|---|---|
 | GET | `/api/Pagos/historial` | Historial de pagos | JWT |
-| POST | `/api/Pagos/crear-sesion` | Crear sesión de pago (Stripe) | JWT |
+| POST | `/api/Pagos/crear-sesion` | Crear sesión de pago — body `{ planNombre, metodoPago: "stripe" }`; responde `checkoutUrl`, `sessionId`, `monto`, `moneda` | JWT |
 | GET | `/api/Pagos/{id}/recibo` | Recibo de pago | JWT |
-| POST | `/api/Pagos/cancelar` | Cancelar pago | JWT |
-| POST | `/api/Pagos/webhook/stripe` | Webhook Stripe (firma verificada) | Firma HMAC |
+| POST | `/api/Pagos/cancelar` | Cancelar suscripción activa | JWT |
+| POST | `/api/Pagos/webhook/stripe` | Webhook Stripe (firma verificada, `checkout.session.completed`) | Firma HMAC |
 
 ### Planes (7 endpoints)
 
@@ -500,6 +503,8 @@ docker run -p 5000:8080 \
   -e SMTP_USER="tu@email.com" \
   -e SMTP_PASSWORD="tu-password" \
   -e SMTP_FROM="tu@email.com" \
+  -e STRIPE_SECRET_KEY="sk_test_..." \
+  -e STRIPE_WEBHOOK_SECRET="whsec_..." \
   bioguard-api
 ```
 
@@ -515,10 +520,12 @@ docker run -p 5000:8080 \
 | `SMTP_USER` | Usuario SMTP |
 | `SMTP_PASSWORD` | Password SMTP |
 | `SMTP_FROM` | Email remitente |
+| `Stripe__SecretKey` o `STRIPE_SECRET_KEY` | Clave secreta de Stripe (`sk_test_...` / `sk_live_...`) |
+| `Stripe__WebhookSecret` o `STRIPE_WEBHOOK_SECRET` | Secreto del webhook de Stripe (`whsec_...`) |
 
 ### CI/CD Pipeline (GitHub Actions)
 
-1. **Build & Test**: Compila, corre 480 tests, NuGet audit, licencias
+1. **Build & Test**: Compila, corre 483 tests, NuGet audit, licencias
 2. **CodeQL Analysis (SAST)**: Análisis estático de seguridad
 3. **Secret Scanning**: Escaneo de secretos expuestos
 4. **Container Security Scan**: Escaneo de vulnerabilidades en la imagen Docker
@@ -545,7 +552,7 @@ dotnet test --verbosity minimal
 
 | Tipo | Cantidad | Descripción |
 |---|---|---|
-| Unit Tests | ~210 | Servicios aislados con mocks |
+| Unit Tests | ~214 | Servicios aislados con mocks |
 | Integration Tests | ~110 | Endpoints HTTP completos |
 | Security Tests | ~85 | IDOR, auth, input validation, timing, rate limiting |
 | Non-Functional Tests | ~5 | Smoke tests (health, login, lecturas 200 OK) |
@@ -577,6 +584,36 @@ Authorization: Bearer <admin_token>
 ```
 
 ## Changelog
+
+### PR #71 — Devolver `checkoutUrl` al crear sesión de pago (rama-Liz -> master)
+
+| Fix | Descripción |
+|---|---|
+| **Respuesta de `crear-sesion`** | `POST /api/Pagos/crear-sesion` ahora devuelve `checkoutUrl` (además de `sessionId`, `monto`, `moneda`). El frontend debe redirigir a esa URL. |
+| **Motivación** | La URL de checkout de Stripe lleva un fragmento cifrado (`#fidnand...`) que **no se puede reconstruir** a partir del `sessionId`; si el frontend intenta armarla, el pago falla. |
+| **Persistencia** | Nuevo campo `checkout_url` en la colección `pagos` para referencia. |
+| **Tests** | 483/483 correctos, build 0 warnings. Deployado a producción. |
+
+### PR #70 — Fix: aceptar cualquier `api_version` en webhook de Stripe (rama-Liz -> master)
+
+| Fix | Descripción |
+|---|---|
+| **Bug en webhook** | Stripe firma los eventos con su `api_version` actual; si no coincide con la versión de la librería (Stripe.net), `ConstructEvent` lanzaba excepción y el webhook respondía 500. |
+| **Solución** | `EventUtility.ConstructEvent(payload, signature, secret, 300, throwOnApiVersionMismatch: false)` en `VerifyWebhookSignatureAsync` y `ParseWebhookEventAsync` (`StripePaymentGateway.cs`). |
+| **Verificado en producción** | Webhook responde `200 {"received":true}` con firma válida real. |
+| **Tests nuevos** | `StripePaymentGatewayTests` (4 tests): firma válida, firma inválida, api_version distinta, parseo de evento. |
+
+### PR #69 — Eliminar Mercado Pago: pagos solo con Stripe (rama-Liz -> master)
+
+| Fix | Descripción |
+|---|---|
+| **Solo Stripe** | Eliminados `MercadoPagoPaymentGateway.cs`, `MercadoPagoOptions.cs`, `MercadoPagoPreferenceId` (modelo), webhook `POST /api/Pagos/webhook/mercadopago` y la sección `MercadoPago` de `appsettings.json`. |
+| **Validación** | `metodoPago` solo acepta `"stripe"`; cualquier otro valor responde 400. |
+| **Precios reales (MXN)** | Familiar **$1** (`price_1TzX4KLjTPFQFc1GZC6A6wtC`, product `prod_UzW6FlFfBVSYPG`) y Pro **$2** (`price_1TzX4KLjTPFQFc1GwETqGdKG`, product `prod_UzW6PJYpeXDG2p`), suscripciones mensuales, modo test. |
+| **MongoDB** | `planes.stripe_price_id` actualizado para Familiar y Pro. |
+| **Webhook Stripe** | Endpoint creado hacia producción (evento `checkout.session.completed`). |
+| **Config robusta** | `Program.cs` acepta `Stripe__SecretKey`/`Stripe__WebhookSecret` o `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`. Variables configuradas en DigitalOcean. |
+| **Fallback de precio** | Si `plan.StripePriceId` está vacío, el gateway crea el precio automáticamente (`precio*100` MXN mensual). |
 
 ### PR #67 — Datos Biométricos Completos del Paciente (rama-Liz -> master)
 
