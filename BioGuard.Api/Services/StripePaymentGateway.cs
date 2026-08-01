@@ -92,7 +92,7 @@ public class StripePaymentGateway : IPaymentGateway
     {
         try
         {
-            EventUtility.ConstructEvent(payload, signature, _options.WebhookSecret);
+            EventUtility.ConstructEvent(payload, signature, _options.WebhookSecret, 300, throwOnApiVersionMismatch: false);
             return Task.FromResult(true);
         }
         catch (StripeException ex)
@@ -106,7 +106,7 @@ public class StripePaymentGateway : IPaymentGateway
     {
         try
         {
-            var stripeEvent = EventUtility.ConstructEvent(payload, signature, _options.WebhookSecret);
+            var stripeEvent = EventUtility.ConstructEvent(payload, signature, _options.WebhookSecret, 300, throwOnApiVersionMismatch: false);
             var session = stripeEvent.Data.Object as Session;
 
             return Task.FromResult(new PaymentWebhookEvent(
