@@ -198,9 +198,15 @@ builder.Services.AddSignalR();
 // =============================================
 // CONFIGURATION BINDINGS
 // =============================================
-builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection("Stripe"));
+builder.Services.Configure<StripeOptions>(options =>
+{
+    builder.Configuration.GetSection("Stripe").Bind(options);
+    if (string.IsNullOrEmpty(options.SecretKey))
+        options.SecretKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
+    if (string.IsNullOrEmpty(options.WebhookSecret))
+        options.WebhookSecret = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET") ?? "";
+});
 builder.Services.Configure<PayPalOptions>(builder.Configuration.GetSection("PayPal"));
-builder.Services.Configure<MercadoPagoOptions>(builder.Configuration.GetSection("MercadoPago"));
 builder.Services.Configure<FirebaseOptions>(builder.Configuration.GetSection("Firebase"));
 builder.Services.Configure<ImgBbOptions>(builder.Configuration.GetSection("ImgBB"));
 
@@ -228,7 +234,6 @@ builder.Services.AddScoped<IPlanLimiteService, PlanLimiteService>();
 builder.Services.AddScoped<IPushNotificationService, FirebasePushNotificationService>();
 builder.Services.AddHttpClient<IImageStorageService, ImgBbImageStorageService>();
 builder.Services.AddScoped<StripePaymentGateway>();
-builder.Services.AddHttpClient<MercadoPagoPaymentGateway>();
 builder.Services.AddScoped<PaymentGatewayFactory>();
 
 // =============================================

@@ -81,8 +81,6 @@ public class CustomWebApplicationFactory : WebApplicationFactory<BioGuard.Api.Pr
             // Replace real payment gateways with mocks for integration tests
             var stripeDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(StripePaymentGateway));
             if (stripeDescriptor != null) services.Remove(stripeDescriptor);
-            var mpDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(MercadoPagoPaymentGateway));
-            if (mpDescriptor != null) services.Remove(mpDescriptor);
             var factoryDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(PaymentGatewayFactory));
             if (factoryDescriptor != null) services.Remove(factoryDescriptor);
 
@@ -91,16 +89,10 @@ public class CustomWebApplicationFactory : WebApplicationFactory<BioGuard.Api.Pr
             var mockStripeLogger = new Mock<ILogger<StripePaymentGateway>>();
             services.AddSingleton(new StripePaymentGateway(mockStripeOptions.Object, mockStripeLogger.Object));
 
-            var mockMpOptions = new Mock<IOptions<MercadoPagoOptions>>();
-            mockMpOptions.Setup(o => o.Value).Returns(new MercadoPagoOptions());
-            var mockMpLogger = new Mock<ILogger<MercadoPagoPaymentGateway>>();
-            services.AddSingleton(new MercadoPagoPaymentGateway(mockMpOptions.Object, mockMpLogger.Object, new HttpClient()));
-
             services.AddSingleton(sp =>
             {
                 var stripe = sp.GetRequiredService<StripePaymentGateway>();
-                var mp = sp.GetRequiredService<MercadoPagoPaymentGateway>();
-                return new PaymentGatewayFactory(stripe, mp);
+                return new PaymentGatewayFactory(stripe);
             });
 
             services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>

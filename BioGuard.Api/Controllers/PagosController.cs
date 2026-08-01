@@ -38,7 +38,7 @@ public class PagosController : ControllerBase
         return Ok(new
         {
             PagoId = pago.Id,
-            SessionId = pago.StripeSessionId ?? pago.MercadoPagoPreferenceId,
+            SessionId = pago.StripeSessionId,
             pago.Gateway,
             pago.Monto,
             pago.Moneda,
@@ -132,34 +132,6 @@ public class PagosController : ControllerBase
         }
 
         _logger.LogInformation("Stripe webhook processed successfully");
-        return Ok(new { received = true });
-    }
-
-    [AllowAnonymous]
-    [HttpPost("webhook/mercadopago")]
-    public async Task<IActionResult> WebhookMercadoPago()
-    {
-        var signature = Request.Headers["x-signature"].FirstOrDefault();
-        if (string.IsNullOrEmpty(signature))
-        {
-            _logger.LogWarning("Mercado Pago webhook received without signature");
-            return BadRequest(new { message = "Missing x-signature header" });
-        }
-
-        string rawBody;
-        using (var reader = new System.IO.StreamReader(Request.Body, System.Text.Encoding.UTF8))
-        {
-            rawBody = await reader.ReadToEndAsync();
-        }
-
-        var result = await _pagosService.ProcesarWebhookMercadoPagoAsync(rawBody, signature);
-        if (!result)
-        {
-            _logger.LogWarning("Mercado Pago webhook processing failed");
-            return StatusCode(500, new { message = "Webhook processing failed" });
-        }
-
-        _logger.LogInformation("Mercado Pago webhook processed successfully");
         return Ok(new { received = true });
     }
 }
