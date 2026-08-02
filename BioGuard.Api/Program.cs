@@ -210,7 +210,6 @@ builder.Services.Configure<StripeOptions>(options =>
     if (string.IsNullOrEmpty(options.WebhookSecret))
         options.WebhookSecret = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET") ?? "";
 });
-builder.Services.Configure<PayPalOptions>(builder.Configuration.GetSection("PayPal"));
 builder.Services.Configure<FirebaseOptions>(builder.Configuration.GetSection("Firebase"));
 builder.Services.Configure<ImgBbOptions>(builder.Configuration.GetSection("ImgBB"));
 
