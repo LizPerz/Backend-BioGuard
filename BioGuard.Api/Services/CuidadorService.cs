@@ -41,6 +41,14 @@ public class CuidadorService
         return (int)await _db.CountDocumentsAsync(_db.Cuidadores, c => c.PacienteId == pacienteId);
     }
 
+    public async Task<bool> ExisteCorreoPorPacienteAsync(string pacienteId, string correo)
+    {
+        if (string.IsNullOrWhiteSpace(correo)) return false;
+        var existente = await _db.FindFirstOrDefaultAsync(_db.Cuidadores,
+            c => c.PacienteId == pacienteId && c.Correo == correo);
+        return existente != null;
+    }
+
     public async Task<(Cuidador? cuidador, string codigo)> CrearAsync(
         string usuarioId, string pacienteId, string nombre, string parentesco,
         string telefono, string correo)

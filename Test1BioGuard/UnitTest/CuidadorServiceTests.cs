@@ -188,4 +188,47 @@ public class CuidadorServiceTests
 
         result.Should().BeNull();
     }
+
+    [Fact]
+    public async Task ExisteCorreoPorPacienteAsync_CorreoDuplicado_RetornaTrue()
+    {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                _mockCollection.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(new Cuidador
+            {
+                Id = "c1",
+                PacienteId = "pac123",
+                Correo = "pedro@test.com"
+            });
+
+        var result = await _service.ExisteCorreoPorPacienteAsync("pac123", "pedro@test.com");
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ExisteCorreoPorPacienteAsync_SinDuplicado_RetornaFalse()
+    {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                _mockCollection.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync((Cuidador?)null);
+
+        var result = await _service.ExisteCorreoPorPacienteAsync("pac123", "nuevo@test.com");
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExisteCorreoPorPacienteAsync_CorreoVacio_RetornaFalseSinConsultar()
+    {
+        var result = await _service.ExisteCorreoPorPacienteAsync("pac123", "");
+
+        result.Should().BeFalse();
+        _mockDb.Verify(db => db.FindFirstOrDefaultAsync(
+                _mockCollection.Object,
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()),
+            Times.Never);
+    }
 }

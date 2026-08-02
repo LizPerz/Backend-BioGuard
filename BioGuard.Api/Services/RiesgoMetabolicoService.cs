@@ -268,7 +268,4 @@ public class RiesgoMetabolicoService : IRiesgoMetabolicoService
 
         return Task.FromResult<AlertTrigger?>(null);
     }
-
-    private bool EsHoraSueno(int hora)
-        => hora >= SUEÑO_INICIO_HORA || hora < SUEÑO_FIN_HORA;
 }

@@ -155,6 +155,12 @@ public class CuidadoresController : ControllerBase
             return BadRequest(new { message = "Límite de cuidadores alcanzado" });
         }
 
+        if (await _cuidadorService.ExisteCorreoPorPacienteAsync(request.PacienteId, request.Correo))
+        {
+            _logger.LogWarning("Duplicate caregiver email for paciente: {PacienteId}, user: {UserId}", request.PacienteId, usuarioId);
+            return BadRequest(new { message = "El correo ya está registrado para un cuidador de este paciente" });
+        }
+
         _logger.LogInformation("Creating cuidador for user: {UserId}, paciente: {PacienteId}", usuarioId, request.PacienteId);
         var (cuidador, codigo) = await _cuidadorService.CrearAsync(
             usuarioId, request.PacienteId, request.Nombre, request.Parentesco,
