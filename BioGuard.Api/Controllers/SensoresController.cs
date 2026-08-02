@@ -409,9 +409,9 @@ public class SensoresController : ControllerBase
 
         _logger.LogInformation("Fetching current GPS location for paciente: {PacienteId}", pacienteId);
         var ubicacion = await _sensorService.ObtenerUltimaUbicacionAsync(pacienteId);
-        if (ubicacion == null)
+        if (ubicacion == null || ubicacion.Ubicacion == null || ubicacion.Ubicacion.Coordinates is not { Length: >= 2 })
         {
-            _logger.LogWarning("No GPS location found for paciente: {PacienteId}", pacienteId);
+            _logger.LogWarning("No valid GPS location found for paciente: {PacienteId}", pacienteId);
             return NotFound(new { message = "Sin ubicación" });
         }
 
@@ -442,11 +442,13 @@ public class SensoresController : ControllerBase
 
         _logger.LogInformation("Fetching GPS route for paciente: {PacienteId} from {Desde} to {Hasta}", pacienteId, desde, hasta);
         var puntos = await _sensorService.ObtenerTrackingRangoAsync(pacienteId, desde, hasta);
-        var response = puntos.Select(p => new TrackingResponse(
-            p.Ubicacion.Coordinates[0],
-            p.Ubicacion.Coordinates[1],
-            p.Timestamp,
-            p.EsEmergencia));
+        var response = puntos
+            .Where(p => p.Ubicacion != null && p.Ubicacion.Coordinates is { Length: >= 2 })
+            .Select(p => new TrackingResponse(
+                p.Ubicacion!.Coordinates[0],
+                p.Ubicacion.Coordinates[1],
+                p.Timestamp,
+                p.EsEmergencia));
         return Ok(response);
     }
 }

@@ -36,7 +36,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
 
     private void SetAdminAuth() => _client.DefaultRequestHeaders.Authorization =
         new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
-            TestTokenHelper.GenerateToken("admin1", "dueno"));
+            TestTokenHelper.GenerateToken("admin1", "admin"));
 
     private static Mock<UpdateResult> MockUpdateResult(long modifiedCount = 1)
     {
@@ -330,6 +330,77 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
                 TestTokenHelper.GeneratePacienteToken("pac123"));
 
         var response = await _client.GetAsync("/api/Admin/usuarios");
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Admin_EsDueno_Retorna403()
+    {
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateToken("dueno123", "dueno"));
+
+        var response = await _client.GetAsync("/api/Admin/usuarios");
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task SeedAll_SinToken_Retorna401()
+    {
+        var response = await _client.PostAsync("/api/Seed/seed-all", null);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task SeedAll_ConDuenoToken_Retorna403()
+    {
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateToken("dueno123", "dueno"));
+
+        var response = await _client.PostAsync("/api/Seed/seed-all", null);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task SeedAll_ConAdminToken_Retorna200YNoExponePassword()
+    {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(new Plan { Id = "plan1", Nombre = "Gratis" });
+
+        _mockUsuarios.Setup(c => c.InsertOneAsync(
+                It.IsAny<UsuarioWeb>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        SetAdminAuth();
+        var response = await _client.PostAsync("/api/Seed/seed-all", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.TryGetProperty("message", out _).Should().BeTrue();
+        doc.RootElement.TryGetProperty("password", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task MigratePasswords_SinToken_Retorna401()
+    {
+        var response = await _client.PostAsync("/api/Seed/migrate-passwords", null);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task MigratePasswords_ConDuenoToken_Retorna403()
+    {
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                TestTokenHelper.GenerateToken("dueno123", "dueno"));
+
+        var response = await _client.PostAsync("/api/Seed/migrate-passwords", null);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 }

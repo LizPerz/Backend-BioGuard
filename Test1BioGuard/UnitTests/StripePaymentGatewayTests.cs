@@ -86,4 +86,48 @@ public class StripePaymentGatewayTests
         evt.Status.Should().Be("completado");
         evt.PlanId.Should().Be("plan1");
     }
+
+    [Fact]
+    public async Task ParseWebhookEvent_InvoicePaid_MapeaRenovacion()
+    {
+        var gateway = BuildGateway();
+        const string payload =
+            "{\"id\":\"evt_2\",\"object\":\"event\",\"api_version\":\"2024-06-20\",\"created\":1730000001," +
+            "\"livemode\":false,\"pending_webhooks\":1,\"request\":{\"id\":\"req_2\",\"idempotency_key\":null}," +
+            "\"type\":\"invoice.paid\",\"data\":{\"object\":{" +
+            "\"id\":\"in_1\",\"object\":\"invoice\",\"subscription\":\"sub_1\",\"customer\":\"cus_1\"," +
+            "\"status\":\"paid\",\"amount_paid\":100,\"currency\":\"mxn\"}}}";
+        var (signature, body) = SignPayload(payload);
+
+        var evt = await gateway.ParseWebhookEventAsync(body, signature);
+
+        evt.Type.Should().Be("invoice.paid");
+        evt.Status.Should().Be("renovado");
+        evt.SubscriptionId.Should().Be("sub_1");
+        evt.CustomerId.Should().Be("cus_1");
+        evt.SessionId.Should().BeNull();
+        evt.PlanId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ParseWebhookEvent_SuscripcionCancelada_MapeaCancelacion()
+    {
+        var gateway = BuildGateway();
+        const string payload =
+            "{\"id\":\"evt_3\",\"object\":\"event\",\"api_version\":\"2024-06-20\",\"created\":1730000002," +
+            "\"livemode\":false,\"pending_webhooks\":1,\"request\":{\"id\":\"req_3\",\"idempotency_key\":null}," +
+            "\"type\":\"customer.subscription.deleted\",\"data\":{\"object\":{" +
+            "\"id\":\"sub_1\",\"object\":\"subscription\",\"customer\":\"cus_1\",\"status\":\"canceled\"," +
+            "\"plan\":{\"id\":\"price_x\",\"object\":\"plan\",\"interval\":\"month\"}}}}";
+        var (signature, body) = SignPayload(payload);
+
+        var evt = await gateway.ParseWebhookEventAsync(body, signature);
+
+        evt.Type.Should().Be("customer.subscription.deleted");
+        evt.Status.Should().Be("cancelado");
+        evt.SubscriptionId.Should().Be("sub_1");
+        evt.CustomerId.Should().Be("cus_1");
+        evt.SessionId.Should().BeNull();
+        evt.PlanId.Should().BeNull();
+    }
 }

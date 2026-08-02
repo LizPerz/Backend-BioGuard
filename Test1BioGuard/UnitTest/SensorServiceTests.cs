@@ -156,6 +156,30 @@ public class SensorServiceTests
     }
 
     [Fact]
+    public async Task ObtenerLecturasRangoAsync_AplicaLimiteMaximo()
+    {
+        _mockDb.Setup(db => db.FindToListAsync(
+                _mockLecturas.Object,
+                It.IsAny<FilterDefinition<LecturaSensor>>(),
+                It.IsAny<SortDefinition<LecturaSensor>>(),
+                It.IsAny<int?>(),
+                It.IsAny<int?>()))
+            .ReturnsAsync(new List<LecturaSensor>());
+
+        await _service.ObtenerLecturasRangoAsync(
+            "123456789012345678901234",
+            new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2024, 12, 31, 23, 59, 59, DateTimeKind.Utc));
+
+        _mockDb.Verify(db => db.FindToListAsync(
+            _mockLecturas.Object,
+            It.IsAny<FilterDefinition<LecturaSensor>>(),
+            It.IsAny<SortDefinition<LecturaSensor>>(),
+            It.Is<int?>(limite => limite == 1000),
+            It.IsAny<int?>()), Times.Once);
+    }
+
+    [Fact]
     public async Task ObtenerEventosAsync_ConEventos_RetornaLista()
     {
         var eventos = new List<EventoMetabolico>

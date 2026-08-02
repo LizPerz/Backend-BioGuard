@@ -102,16 +102,27 @@ public class PagosService
         }
 
         var evento = await gateway.ParseWebhookEventAsync(rawBody, signature);
-        if (evento.Status != "completado" || string.IsNullOrEmpty(evento.SessionId))
-        {
-            _logger.LogInformation("Stripe webhook ignorado: {Type} -> {Status}", evento.Type, evento.Status);
-            return true;
-        }
 
-        return await ConfirmarPagoAsync(evento.SessionId, "stripe", evento.SubscriptionId, evento.PlanId);
+        switch (evento.Status)
+        {
+            case "completado":
+                if (string.IsNullOrEmpty(evento.SessionId))
+                {
+                    _logger.LogWarning("Stripe webhook 'completado' sin SessionId");
+                    return true;
+                }
+                return await ConfirmarPagoAsync(evento.SessionId, "stripe", evento.SubscriptionId, evento.CustomerId, evento.PlanId);
+            case "renovado":
+                return await RegistrarRenovacionAsync(evento.SubscriptionId, evento.CustomerId);
+            case "cancelado":
+                return await CancelarSuscripcionPorWebhookAsync(evento.SubscriptionId);
+            default:
+                _logger.LogInformation("Stripe webhook ignorado: {Type} -> {Status}", evento.Type, evento.Status);
+                return true;
+        }
     }
 
-    private async Task<bool> ConfirmarPagoAsync(string sessionId, string gateway, string? subscriptionId, string? planId)
+    private async Task<bool> ConfirmarPagoAsync(string sessionId, string gateway, string? subscriptionId, string? customerId, string? planId)
     {
         var filter = Builders<Pago>.Filter.Eq(p => p.StripeSessionId, sessionId);
 
@@ -133,7 +144,9 @@ public class PagosService
             .Set(p => p.FechaPago, DateTime.UtcNow);
 
         if (!string.IsNullOrEmpty(subscriptionId))
-            update = update.Set(p => p.StripeSessionId, subscriptionId);
+            update = update.Set(p => p.StripeSubscriptionId, subscriptionId);
+        if (!string.IsNullOrEmpty(customerId))
+            update = update.Set(p => p.StripeCustomerId, customerId);
 
         await _db.Pagos.UpdateOneAsync(p => p.Id == pago.Id, update);
 
@@ -146,6 +159,82 @@ public class PagosService
         }
 
         _logger.LogInformation("Pago {PagoId} confirmado y plan activado para usuario {UsuarioId}", pago.Id, pago.UsuarioWebId);
+        return true;
+    }
+
+    private async Task<bool> RegistrarRenovacionAsync(string? subscriptionId, string? customerId)
+    {
+        if (string.IsNullOrEmpty(subscriptionId))
+        {
+            _logger.LogWarning("Stripe webhook 'renovado' sin SubscriptionId");
+            return true;
+        }
+
+        var filter = Builders<Pago>.Filter.Or(
+            Builders<Pago>.Filter.Eq(p => p.StripeSubscriptionId, subscriptionId),
+            Builders<Pago>.Filter.Eq(p => p.StripeSessionId, subscriptionId));
+        var sort = Builders<Pago>.Sort.Descending(p => p.FechaPago);
+        var pagoAnterior = await _db.FindFirstOrDefaultAsync(_db.Pagos, filter, sort);
+
+        if (pagoAnterior == null)
+        {
+            _logger.LogWarning("No se encontró pago para la suscripción renovada {SubscriptionId}", subscriptionId);
+            return true;
+        }
+
+        var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == pagoAnterior.PlanId);
+        if (plan == null)
+        {
+            _logger.LogWarning("Plan no encontrado para renovación de suscripción {SubscriptionId}", subscriptionId);
+            return true;
+        }
+
+        var renovacion = new Pago
+        {
+            UsuarioWebId = pagoAnterior.UsuarioWebId,
+            Monto = plan.Precio,
+            Moneda = plan.PrecioMoneda,
+            PlanId = plan.Id,
+            StripeSubscriptionId = subscriptionId,
+            StripeCustomerId = customerId,
+            Estado = "completado",
+            FechaPago = DateTime.UtcNow,
+            MetodoPago = "stripe",
+            Gateway = "stripe"
+        };
+
+        await _db.Pagos.InsertOneAsync(renovacion);
+        await _usuariosWebService.CambiarPlanAsync(pagoAnterior.UsuarioWebId, plan.Nombre);
+
+        _logger.LogInformation("Renovación registrada para suscripción {SubscriptionId}, usuario {UsuarioId}", subscriptionId, pagoAnterior.UsuarioWebId);
+        return true;
+    }
+
+    private async Task<bool> CancelarSuscripcionPorWebhookAsync(string? subscriptionId)
+    {
+        if (string.IsNullOrEmpty(subscriptionId))
+        {
+            _logger.LogWarning("Stripe webhook 'cancelado' sin SubscriptionId");
+            return true;
+        }
+
+        var filter = Builders<Pago>.Filter.Or(
+            Builders<Pago>.Filter.Eq(p => p.StripeSubscriptionId, subscriptionId),
+            Builders<Pago>.Filter.Eq(p => p.StripeSessionId, subscriptionId));
+        var sort = Builders<Pago>.Sort.Descending(p => p.FechaPago);
+        var pago = await _db.FindFirstOrDefaultAsync(_db.Pagos, filter, sort);
+
+        if (pago == null)
+        {
+            _logger.LogWarning("No se encontró pago para la suscripción cancelada {SubscriptionId}", subscriptionId);
+            return true;
+        }
+
+        await _usuariosWebService.CambiarPlanAsync(pago.UsuarioWebId, "Gratis");
+        await _db.Pagos.UpdateOneAsync(p => p.Id == pago.Id,
+            Builders<Pago>.Update.Set(p => p.Estado, "cancelado"));
+
+        _logger.LogInformation("Suscripción {SubscriptionId} cancelada, usuario {UsuarioId} bajado a plan Gratis", subscriptionId, pago.UsuarioWebId);
         return true;
     }
 
@@ -179,7 +268,7 @@ public class PagosService
         }
 
         var gateway = _gatewayFactory.GetGateway(pago.Gateway);
-        var gatewayOk = await gateway.CancelSubscriptionAsync(pago.StripeSessionId ?? "");
+        var gatewayOk = await gateway.CancelSubscriptionAsync(pago.StripeSubscriptionId ?? pago.StripeSessionId ?? "");
 
         if (!gatewayOk)
         {

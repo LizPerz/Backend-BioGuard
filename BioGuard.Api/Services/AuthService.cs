@@ -149,11 +149,12 @@ public class AuthService
         }
 
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
-        var token = GenerateToken(user.Id, user.Correo, "dueno");
-        var refreshToken = await CreateAndStoreRefreshTokenAsync(user.Id);
+        var role = RolWebUsuario(user);
+        var token = GenerateToken(user.Id, user.Correo, role);
+        var refreshToken = await CreateAndStoreRefreshTokenAsync(user.Id, role);
         _logger.LogInformation("User logged in successfully: {UserId}", user.Id);
 
-        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan?.Nombre ?? "Sin plan", RefreshToken: refreshToken);
+        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", role, plan?.Nombre ?? "Sin plan", RefreshToken: refreshToken);
     }
 
     // ── Login Google ───────────────────────────────────────
@@ -167,7 +168,18 @@ public class AuthService
             return null;
         }
 
+        return await LoginGoogleValidadoAsync(email, sub);
+    }
+
+    internal async Task<AuthResponse?> LoginGoogleValidadoAsync(string email, string sub)
+    {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == email);
+
+        if (user != null && !user.Activo)
+        {
+            _logger.LogWarning("Google login attempt for inactive user: {Email}", email);
+            return null;
+        }
 
         if (user == null)
         {
@@ -188,15 +200,16 @@ public class AuthService
                 FechaRegistro = DateTime.UtcNow
             };
 
-        await _db.UsuariosWeb.InsertOneAsync(user);
+            await _db.UsuariosWeb.InsertOneAsync(user);
         }
 
         var userPlan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
-        var token = GenerateToken(user.Id, user.Correo, "dueno");
-        var refreshToken = await CreateAndStoreRefreshTokenAsync(user.Id);
+        var role = RolWebUsuario(user);
+        var token = GenerateToken(user.Id, user.Correo, role);
+        var refreshToken = await CreateAndStoreRefreshTokenAsync(user.Id, role);
         _logger.LogInformation("Google login successful for user: {UserId}", user.Id);
 
-        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", userPlan?.Nombre ?? "Sin plan", RefreshToken: refreshToken);
+        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", role, userPlan?.Nombre ?? "Sin plan", RefreshToken: refreshToken);
     }
 
     // ── Login por Código (Móvil) ───────────────────────────
@@ -274,6 +287,7 @@ public class AuthService
                 _logger.LogWarning("Refresh token user not found: {UsuarioId}", stored.UsuarioId);
                 return null;
             }
+            role = RolWebUsuario(user);
             userId = user.Id;
             userEmail = user.Correo;
             userName = $"{user.Nombre} {user.ApellidoPaterno}";
@@ -383,11 +397,12 @@ public class AuthService
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
 
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
-        var token = GenerateToken(user.Id, user.Correo, "dueno");
-        var refreshToken = await CreateAndStoreRefreshTokenAsync(user.Id);
+        var role = RolWebUsuario(user);
+        var token = GenerateToken(user.Id, user.Correo, role);
+        var refreshToken = await CreateAndStoreRefreshTokenAsync(user.Id, role);
         _logger.LogInformation("2FA verified successfully for user: {UserId} (activated={WasInactive})", user.Id, wasInactive);
 
-        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan?.Nombre ?? "Sin plan", RefreshToken: refreshToken);
+        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", role, plan?.Nombre ?? "Sin plan", RefreshToken: refreshToken);
     }
 
     // ── Forgot Password ────────────────────────────────────
@@ -512,6 +527,8 @@ public class AuthService
     }
 
     // ── Helpers ────────────────────────────────────────────
+
+    private static string RolWebUsuario(UsuarioWeb user) => user.EsAdmin ? "admin" : "dueno";
 
     private async Task<string> CreateAndStoreRefreshTokenAsync(string userId, string role = "dueno")
     {

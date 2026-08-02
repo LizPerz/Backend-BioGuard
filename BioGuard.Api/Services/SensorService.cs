@@ -48,7 +48,7 @@ public class SensorService
     }
 
     public async Task<List<LecturaSensor>> ObtenerLecturasRangoAsync(
-        string pacienteId, DateTime desde, DateTime hasta)
+        string pacienteId, DateTime desde, DateTime hasta, int limite = 1000)
     {
         var filter = Builders<LecturaSensor>.Filter.And(
             Builders<LecturaSensor>.Filter.Eq(l => l.Meta.PacienteId, pacienteId),
@@ -56,7 +56,7 @@ public class SensorService
             Builders<LecturaSensor>.Filter.Lte(l => l.Timestamp, hasta)
         );
         var sort = Builders<LecturaSensor>.Sort.Descending(l => l.Timestamp);
-        return await _db.FindToListAsync(_db.LecturasSensores, filter, sort);
+        return await _db.FindToListAsync(_db.LecturasSensores, filter, sort, limite);
     }
 
     public async Task<EventoMetabolico> CrearEventoAsync(string pacienteId, double probabilidad,

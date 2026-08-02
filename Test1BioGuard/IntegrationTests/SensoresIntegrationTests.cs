@@ -368,6 +368,33 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
     }
 
     [Fact]
+    public async Task TrackingActual_UbicacionSinCoordenadas_Retorna404()
+    {
+        var pacienteId = "123456789012345678901234";
+        var ubicacion = new TrackingGps
+        {
+            Id = "trk1",
+            Meta = new MetaData { PacienteId = pacienteId },
+            Timestamp = DateTime.UtcNow,
+            Ubicacion = new UbicacionGps { Coordinates = Array.Empty<double>() },
+            EsEmergencia = false
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<TrackingGps>>(),
+                It.IsAny<FilterDefinition<TrackingGps>>(),
+                It.IsAny<SortDefinition<TrackingGps>>()))
+            .ReturnsAsync(ubicacion);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
+
+        var response = await _client.GetAsync($"/api/Sensores/tracking/{pacienteId}/actual");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task RecibirLectura_LecturaValida_Retorna200()
     {
         var pacienteId = "123456789012345678901234";
@@ -588,6 +615,49 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
                 Meta = new MetaData { PacienteId = pacienteId },
                 Timestamp = DateTime.UtcNow,
                 Ubicacion = new UbicacionGps { Coordinates = new[] { -99.1, 19.4 } },
+                EsEmergencia = false
+            }
+        };
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                It.IsAny<IMongoCollection<TrackingGps>>(),
+                It.IsAny<FilterDefinition<TrackingGps>>(),
+                It.IsAny<SortDefinition<TrackingGps>>(),
+                It.IsAny<int?>(),
+                It.IsAny<int?>()))
+            .ReturnsAsync(puntos);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
+
+        var response = await _client.GetAsync($"/api/Sensores/tracking/{pacienteId}/ruta?desde=2024-01-01T00:00:00Z&hasta=2024-12-31T23:59:59Z");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TrackingRuta_OmitePuntosSinCoordenadas()
+    {
+        var pacienteId = "123456789012345678901234";
+        var puntos = new List<TrackingGps>
+        {
+            new()
+            {
+                Id = "trk1",
+                Meta = new MetaData { PacienteId = pacienteId },
+                Timestamp = DateTime.UtcNow,
+                Ubicacion = new UbicacionGps { Coordinates = new[] { -99.1, 19.4 } },
+                EsEmergencia = false
+            },
+            new()
+            {
+                Id = "trk2",
+                Meta = new MetaData { PacienteId = pacienteId },
+                Timestamp = DateTime.UtcNow.AddMinutes(-5),
+                Ubicacion = new UbicacionGps { Coordinates = Array.Empty<double>() },
                 EsEmergencia = false
             }
         };
