@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text;
 using AspNetCoreRateLimit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
@@ -95,7 +96,10 @@ builder.Services.AddAuthentication(options =>
 
 
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole("admin"));
+});
 
 // =============================================
 // RATE LIMITING
@@ -326,6 +330,15 @@ app.UseHsts();
 app.UseHttpsRedirection();
 app.UseCors("BioGuardPolicy");
 
+// Forwarded headers (detrás de proxy/DigitalOcean): usa X-Forwarded-For
+// para que el rate limiting vea la IP real del cliente.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    KnownNetworks = { },
+    KnownProxies = { }
+});
+
 // Rate limiting middleware
 app.UseIpRateLimiting();
 
@@ -534,7 +547,7 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
         {
             message = "Seed data inserted",
             userId = user.Id, pacienteId = paciente.Id, cuidadorUserId = cuidadorUser.Id,
-            email = testEmail, password = "SeedTest@123!",
+            email = testEmail,
             skipped, stats = new { lecturas = lecturas.Count, eventos = eventos.Count, tracking = 3, medicamentos = medNames.Length, alertas = 3, notificaciones = 2, dispositivos = 1, cuidadores = 1, pagos = 1, modelos = 1, predicciones = 1 }
         });
     }
@@ -543,7 +556,7 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
         logger.LogError(ex, "Error during seed");
         return Results.Problem(ex.Message);
     }
-});
+}).RequireAuthorization("AdminOnly");
 
 // =============================================
 // MIGRATE BCrypt → PBKDF2 passwords
@@ -552,8 +565,7 @@ app.MapPost("/api/Seed/migrate-passwords", async (IMongoDbContext db, ILogger<Pr
 {
     var affected = new List<string>();
     var batch = new List<WriteModel<UsuarioWeb>>();
-    var newPassword = "SeedTest@123!";
-    var newHash = PasswordHasher.Hash(newPassword);
+    var newHash = PasswordHasher.Hash("SeedTest@123!");
 
     var cursor = await db.UsuariosWeb.FindAsync(FilterDefinition<UsuarioWeb>.Empty);
     var users = await cursor.ToListAsync();
@@ -577,10 +589,9 @@ app.MapPost("/api/Seed/migrate-passwords", async (IMongoDbContext db, ILogger<Pr
     return Results.Ok(new
     {
         message = $"Migrated {affected.Count} users",
-        newPassword,
         affected
     });
-});
+}).RequireAuthorization("AdminOnly");
 
 app.Run();
 

@@ -32,6 +32,9 @@ public class Pago
     [BsonElement("stripe_customer_id")]
     public string? StripeCustomerId { get; set; }
 
+    [BsonElement("stripe_subscription_id")]
+    public string? StripeSubscriptionId { get; set; }
+
     [BsonElement("gateway")]
     public string Gateway { get; set; } = "stripe";
 

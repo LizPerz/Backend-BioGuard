@@ -58,6 +58,9 @@ public class UsuarioWeb
     [BsonElement("activo")]
     public bool Activo { get; set; } = true;
 
+    [BsonElement("es_admin")]
+    public bool EsAdmin { get; set; } = false;
+
     [BsonElement("failed_login_attempts")]
     public int FailedLoginAttempts { get; set; } = 0;
 

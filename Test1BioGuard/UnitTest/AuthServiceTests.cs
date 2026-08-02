@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -176,6 +178,111 @@ public class AuthServiceTests
         var result = await _service.LoginWebAsync(request);
 
         result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LoginWebAsync_EsAdmin_RetornaRolAdmin()
+    {
+        var user = new UsuarioWeb
+        {
+            Id = "admin123", Correo = "admin@test.com", Activo = true, EsAdmin = true,
+            PasswordHash = PasswordHasher.Hash("Password123!"),
+            PlanId = "plan1", Nombre = "Admin", ApellidoPaterno = "Sistema"
+        };
+        var plan = new Plan { Id = "plan1", Nombre = "Premium" };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(user);
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(plan);
+
+        var request = new LoginWebRequest("admin@test.com", "Password123!");
+        var result = await _service.LoginWebAsync(request);
+
+        result.Should().NotBeNull();
+        result!.Rol.Should().Be("admin");
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
+        jwt.Claims.Single(c => c.Type == ClaimTypes.Role).Value.Should().Be("admin");
+    }
+
+    [Fact]
+    public async Task LoginWebAsync_DuenoNormal_NoEmiteRolAdmin()
+    {
+        var user = new UsuarioWeb
+        {
+            Id = "user123", Correo = "test@test.com", Activo = true, EsAdmin = false,
+            PasswordHash = PasswordHasher.Hash("Password123!"),
+            PlanId = "plan1", Nombre = "Test", ApellidoPaterno = "User"
+        };
+        var plan = new Plan { Id = "plan1", Nombre = "Premium" };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(user);
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(plan);
+
+        var request = new LoginWebRequest("test@test.com", "Password123!");
+        var result = await _service.LoginWebAsync(request);
+
+        result.Should().NotBeNull();
+        result!.Rol.Should().Be("dueno");
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
+        jwt.Claims.Single(c => c.Type == ClaimTypes.Role).Value.Should().Be("dueno");
+    }
+
+    [Fact]
+    public async Task LoginGoogle_UsuarioInactivo_RetornaNull()
+    {
+        var user = new UsuarioWeb
+        {
+            Id = "user123", Correo = "inactivo@test.com", Activo = false, PlanId = "plan1"
+        };
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(user);
+
+        var result = await _service.LoginGoogleValidadoAsync("inactivo@test.com", "sub123");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LoginGoogle_UsuarioActivo_RetornaAuthResponse()
+    {
+        var user = new UsuarioWeb
+        {
+            Id = "user123", Correo = "activo@test.com", Activo = true, EsAdmin = true,
+            PlanId = "plan1", Nombre = "Juan", ApellidoPaterno = "Perez"
+        };
+        var plan = new Plan { Id = "plan1", Nombre = "Premium" };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(user);
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(plan);
+
+        var result = await _service.LoginGoogleValidadoAsync("activo@test.com", "sub123");
+
+        result.Should().NotBeNull();
+        result!.Rol.Should().Be("admin");
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
+        jwt.Claims.Single(c => c.Type == ClaimTypes.Role).Value.Should().Be("admin");
     }
 
     [Fact]
@@ -566,6 +673,46 @@ public class AuthServiceTests
         result.Should().NotBeNull();
         result!.AccessToken.Should().NotBeNullOrEmpty();
         result.RefreshToken.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_WebEsAdmin_EmiteRolAdmin()
+    {
+        var storedToken = new RefreshToken
+        {
+            Id = "rt4", UsuarioId = "admin123", Rol = "dueno", Token = "old-refresh-token-admin",
+            ExpiresAt = DateTime.UtcNow.AddDays(7), CreatedAt = DateTime.UtcNow
+        };
+        var user = new UsuarioWeb
+        {
+            Id = "admin123", Correo = "admin@test.com", EsAdmin = true,
+            Nombre = "Admin", ApellidoPaterno = "Sistema"
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<RefreshToken>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<RefreshToken, bool>>>()))
+            .ReturnsAsync(storedToken);
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(user);
+
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
+        _mockRefreshTokens.Setup(c => c.UpdateManyAsync(
+                It.IsAny<FilterDefinition<RefreshToken>>(),
+                It.IsAny<UpdateDefinition<RefreshToken>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        var request = new RefreshTokenRequest("old-refresh-token-admin");
+        var result = await _service.RefreshTokenAsync(request);
+
+        result.Should().NotBeNull();
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result!.AccessToken);
+        jwt.Claims.Single(c => c.Type == ClaimTypes.Role).Value.Should().Be("admin");
     }
 
     [Fact]

@@ -107,23 +107,57 @@ public class StripePaymentGateway : IPaymentGateway
         try
         {
             var stripeEvent = EventUtility.ConstructEvent(payload, signature, _options.WebhookSecret, 300, throwOnApiVersionMismatch: false);
-            var session = stripeEvent.Data.Object as Session;
+
+            var status = stripeEvent.Type switch
+            {
+                "checkout.session.completed" => "completado",
+                "checkout.session.expired" => "expirado",
+                "invoice.paid" => "renovado",
+                "customer.subscription.deleted" => "cancelado",
+                _ => "desconocido"
+            };
+
+            string? sessionId = null;
+            string? subscriptionId = null;
+            string? customerId = null;
+            string? planId = null;
+
+            switch (stripeEvent.Type)
+            {
+                case "checkout.session.completed":
+                case "checkout.session.expired":
+                    if (stripeEvent.Data.Object is Session session)
+                    {
+                        sessionId = session.Id;
+                        subscriptionId = session.SubscriptionId;
+                        customerId = session.CustomerId;
+                        planId = session.Metadata?.GetValueOrDefault("plan_id");
+                    }
+                    break;
+                case "invoice.paid":
+                    if (stripeEvent.Data.Object is Invoice invoice)
+                    {
+                        subscriptionId = invoice.SubscriptionId;
+                        customerId = invoice.CustomerId;
+                    }
+                    break;
+                case "customer.subscription.deleted":
+                    if (stripeEvent.Data.Object is Subscription subscription)
+                    {
+                        subscriptionId = subscription.Id;
+                        customerId = subscription.CustomerId;
+                    }
+                    break;
+            }
 
             return Task.FromResult(new PaymentWebhookEvent(
                 EventId: stripeEvent.Id,
                 Type: stripeEvent.Type,
-                SessionId: session?.Id,
-                SubscriptionId: session?.SubscriptionId,
-                CustomerId: session?.CustomerId,
-                Status: stripeEvent.Type switch
-                {
-                    "checkout.session.completed" => "completado",
-                    "checkout.session.expired" => "expirado",
-                    "invoice.paid" => "renovado",
-                    "customer.subscription.deleted" => "cancelado",
-                    _ => "desconocido"
-                },
-                PlanId: session?.Metadata?.GetValueOrDefault("plan_id")
+                SessionId: sessionId,
+                SubscriptionId: subscriptionId,
+                CustomerId: customerId,
+                Status: status,
+                PlanId: planId
             ));
         }
         catch (StripeException ex)

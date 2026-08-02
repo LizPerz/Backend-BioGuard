@@ -140,4 +140,81 @@ public class PagosServiceTests
         var result = await _service.ProcesarWebhookStripeAsync("{}", "test_sig");
         result.Should().BeTrue();
     }
+    [Fact]
+    public async Task WebhookStripe_Renovacion_RegistraNuevoPago()
+    {
+        var pagoAnterior = new Pago { Id = "pago1", UsuarioWebId = "user123", PlanId = "plan1", StripeSubscriptionId = "sub_1", Estado = "completado" };
+        var plan = new Plan { Id = "plan1", Nombre = "Familiar", Precio = 1, PrecioMoneda = "MXN" };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Pago>>(),
+                It.IsAny<FilterDefinition<Pago>>(),
+                It.IsAny<SortDefinition<Pago>?>()))
+            .ReturnsAsync(pagoAnterior);
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(plan);
+        _mockPagos.Setup(c => c.InsertOneAsync(
+                It.IsAny<Pago>(), It.IsAny<InsertOneOptions>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _mockUsuariosWebService.Setup(u => u.CambiarPlanAsync("user123", "Familiar"))
+            .ReturnsAsync(true);
+
+        var mockGateway = new Mock<IPaymentGateway>();
+        mockGateway.Setup(g => g.VerifyWebhookSignatureAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(true);
+        mockGateway.Setup(g => g.ParseWebhookEventAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new PaymentWebhookEvent("evt2", "invoice.paid", null, "sub_1", "cus_1", "renovado", null));
+        _mockFactory.Setup(f => f.GetGateway("stripe")).Returns(mockGateway.Object);
+
+        var result = await _service.ProcesarWebhookStripeAsync("{}", "test_sig");
+
+        result.Should().BeTrue();
+        _mockPagos.Verify(c => c.InsertOneAsync(
+            It.Is<Pago>(p =>
+                p.UsuarioWebId == "user123" &&
+                p.PlanId == "plan1" &&
+                p.Estado == "completado" &&
+                p.StripeSubscriptionId == "sub_1" &&
+                p.StripeCustomerId == "cus_1" &&
+                p.Gateway == "stripe"),
+            It.IsAny<InsertOneOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _mockUsuariosWebService.Verify(u => u.CambiarPlanAsync("user123", "Familiar"), Times.Once);
+    }
+    [Fact]
+    public async Task WebhookStripe_Cancelacion_BajaPlanAGratis()
+    {
+        var pago = new Pago { Id = "pago1", UsuarioWebId = "user123", PlanId = "plan1", StripeSubscriptionId = "sub_1", Estado = "completado" };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Pago>>(),
+                It.IsAny<FilterDefinition<Pago>>(),
+                It.IsAny<SortDefinition<Pago>?>()))
+            .ReturnsAsync(pago);
+        _mockPagos.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<Pago>>(),
+                It.IsAny<UpdateDefinition<Pago>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Mock<UpdateResult>().Object);
+        _mockUsuariosWebService.Setup(u => u.CambiarPlanAsync("user123", "Gratis"))
+            .ReturnsAsync(true);
+
+        var mockGateway = new Mock<IPaymentGateway>();
+        mockGateway.Setup(g => g.VerifyWebhookSignatureAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(true);
+        mockGateway.Setup(g => g.ParseWebhookEventAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new PaymentWebhookEvent("evt3", "customer.subscription.deleted", null, "sub_1", "cus_1", "cancelado", null));
+        _mockFactory.Setup(f => f.GetGateway("stripe")).Returns(mockGateway.Object);
+
+        var result = await _service.ProcesarWebhookStripeAsync("{}", "test_sig");
+
+        result.Should().BeTrue();
+        _mockUsuariosWebService.Verify(u => u.CambiarPlanAsync("user123", "Gratis"), Times.Once);
+        _mockPagos.Verify(c => c.UpdateOneAsync(
+            It.IsAny<FilterDefinition<Pago>>(),
+            It.IsAny<UpdateDefinition<Pago>>(),
+            It.IsAny<UpdateOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
 }
