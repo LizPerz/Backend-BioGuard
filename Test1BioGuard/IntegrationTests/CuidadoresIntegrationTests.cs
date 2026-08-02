@@ -129,6 +129,43 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
     }
 
     [Fact]
+    public async Task Crear_CorreoDuplicadoEnPaciente_Retorna400()
+    {
+        _mockDb.Setup(db => db.CountDocumentsAsync(
+                It.IsAny<IMongoCollection<Cuidador>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(1L);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(new Paciente { Id = "pac123", UsuarioWebId = "user123" });
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Cuidador>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(new Cuidador
+            {
+                Id = "cuid1",
+                PacienteId = "pac123",
+                Correo = "pedro@test.com"
+            });
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
+
+        var request = new CrearCuidadorRequest("pac123", "Pedro Lopez", "Padre", "5551234567", "pedro@test.com");
+        var response = await _client.PostAsJsonAsync("/api/Cuidadores", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        _mockCuidadores.Verify(c => c.InsertOneAsync(
+                It.IsAny<Cuidador>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task Eliminar_CuidadorExiste_Retorna204()
     {
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
