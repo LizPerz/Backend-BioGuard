@@ -45,10 +45,29 @@ public class AuthService
 
     public async Task<RegisterResult> RegisterWebAsync(RegisterWebRequest request)
     {
-        var exists = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
+        var correo = NormalizeCorreo(request.Correo);
+        var nombre = NormalizarNombre(request.Nombre);
+        var apellidoPaterno = NormalizarNombre(request.ApellidoPaterno);
+        var apellidoMaterno = NormalizarNombre(request.ApellidoMaterno);
+
+        var nombreError = ValidarNombre(nombre, "El nombre");
+        if (nombreError != null)
+        {
+            _logger.LogWarning("Registration attempt with invalid name: {Nombre}", nombre);
+            return new RegisterResult(null, nombreError);
+        }
+
+        var apellidoError = ValidarNombre(apellidoPaterno, "El apellido");
+        if (apellidoError != null)
+        {
+            _logger.LogWarning("Registration attempt with invalid last name: {Apellido}", apellidoPaterno);
+            return new RegisterResult(null, apellidoError);
+        }
+
+        var exists = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == correo);
         if (exists != null)
         {
-            _logger.LogWarning("Registration attempt with existing email: {Email}", request.Correo);
+            _logger.LogWarning("Registration attempt with existing email: {Email}", correo);
             return new RegisterResult(null, "El correo ya está registrado");
         }
 
@@ -62,7 +81,7 @@ public class AuthService
         var (passwordValid, passwordError) = PasswordHasher.ValidateComplexity(request.Password);
         if (!passwordValid)
         {
-            _logger.LogWarning("Registration with weak password for email: {Correo}", request.Correo);
+            _logger.LogWarning("Registration with weak password for email: {Correo}", correo);
             return new RegisterResult(null, passwordError);
         }
 
@@ -71,10 +90,10 @@ public class AuthService
 
         var user = new UsuarioWeb
         {
-            Nombre = request.Nombre,
-            ApellidoPaterno = request.ApellidoPaterno,
-            ApellidoMaterno = request.ApellidoMaterno,
-            Correo = request.Correo,
+            Nombre = nombre,
+            ApellidoPaterno = apellidoPaterno,
+            ApellidoMaterno = apellidoMaterno,
+            Correo = correo,
             PasswordHash = PasswordHasher.Hash(request.Password),
             ProveedorAuth = "local",
             PlanId = plan.Id,
@@ -98,7 +117,7 @@ public class AuthService
 
     public async Task<LoginResult> LoginWebAsync(LoginWebRequest request)
     {
-        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
+        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == NormalizeCorreo(request.Correo));
         if (user == null)
         {
             _logger.LogWarning("Login attempt for non-existent user: {Email}", request.Correo);
@@ -344,7 +363,7 @@ public class AuthService
 
     public async Task<bool> Enviar2FAAsync(Enviar2FARequest request)
     {
-        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
+        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == NormalizeCorreo(request.Correo));
         if (user == null)
         {
             _logger.LogWarning("2FA send attempt for non-existent user: {Email}", request.Correo);
@@ -369,7 +388,7 @@ public class AuthService
 
     public async Task<AuthResponse?> Verificar2FAAsync(Verificar2FARequest request)
     {
-        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
+        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == NormalizeCorreo(request.Correo));
         if (user == null)
         {
             _logger.LogWarning("2FA verification attempt for non-existent user: {Email}", request.Correo);
@@ -415,7 +434,7 @@ public class AuthService
 
     public async Task<bool> ForgotPasswordAsync(ForgotPasswordRequest request)
     {
-        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
+        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == NormalizeCorreo(request.Correo));
         if (user == null || !user.Activo)
         {
             _logger.LogWarning("Password reset attempt for inactive or non-existent user: {Email}", request.Correo);
@@ -648,10 +667,25 @@ public class AuthService
             return (null, null);
         }
     }
+    private static string NormalizeCorreo(string? correo)
+        => (correo ?? string.Empty).Trim().ToLowerInvariant();
+
+    private static string NormalizarNombre(string? value)
+        => string.Join(" ", (value ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    private static string? ValidarNombre(string nombre, string campo)
+    {
+        if (string.IsNullOrWhiteSpace(nombre))
+            return $"{campo} es obligatorio";
+        if (nombre.Length > 100)
+            return $"{campo} no puede exceder los 100 caracteres";
+        if (!nombre.All(c => char.IsLetter(c) || char.IsWhiteSpace(c)))
+            return $"{campo} solo puede contener letras y espacios";
+        return null;
+    }
 }
 
 // ── PBKDF2 Password Hasher ──────────────────────────────
-
 public static class PasswordHasher
 {
     private const int SaltSize = 16;
