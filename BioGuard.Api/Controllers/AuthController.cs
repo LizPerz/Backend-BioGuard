@@ -58,21 +58,22 @@ public class AuthController : ControllerBase
     {
         _logger.LogInformation("Web login attempt for email: {Correo}", request.Correo);
         var result = await _authService.LoginWebAsync(request);
-        if (result == null)
+        if (result.Error != null)
         {
-            _logger.LogWarning("Web login failed for email: {Correo} - invalid credentials", request.Correo);
+            _logger.LogWarning("Web login failed for email: {Correo} - {Error}", request.Correo, result.Error);
             var failIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             await _auditoriaService.RegistrarAsync("unknown", "login_fallido", "usuarios_web", request.Correo, failIp);
-            return Unauthorized(new { message = "Credenciales inválidas" });
+            return Unauthorized(new { message = result.Error });
         }
+        var loginResult = result.Response!;
         _logger.LogInformation("Web login successful for email: {Correo}", request.Correo);
         var loginIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        await _auditoriaService.RegistrarAsync(result.UserId, "login", "usuarios_web", result.UserId, loginIp);
-        if (result.Requires2FA)
+        await _auditoriaService.RegistrarAsync(loginResult.UserId, "login", "usuarios_web", loginResult.UserId, loginIp);
+        if (loginResult.Requires2FA)
         {
-            return Ok(new { message = "Código 2FA enviado al correo", requires2FA = true, userId = result.UserId });
+            return Ok(new { message = "Código 2FA enviado al correo", requires2FA = true, userId = loginResult.UserId });
         }
-        return Ok(result);
+        return Ok(loginResult);
     }
 
     // POST /api/Auth/login-google [WEB]

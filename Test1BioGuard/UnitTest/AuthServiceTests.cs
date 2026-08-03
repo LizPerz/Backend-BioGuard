@@ -168,12 +168,13 @@ public class AuthServiceTests
         var result = await _service.LoginWebAsync(request);
 
         result.Should().NotBeNull();
-        result!.Token.Should().NotBeNullOrEmpty();
-        result.Rol.Should().Be("dueno");
+        result.Error.Should().BeNull();
+        result.Response!.Token.Should().NotBeNullOrEmpty();
+        result.Response.Rol.Should().Be("dueno");
     }
 
     [Fact]
-    public async Task LoginWebAsync_CredencialesInvalidas_RetornaNull()
+    public async Task LoginWebAsync_CredencialesInvalidas_RetornaError()
     {
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
                 It.IsAny<IMongoCollection<UsuarioWeb>>(),
@@ -183,11 +184,13 @@ public class AuthServiceTests
         var request = new LoginWebRequest("wrong@test.com", "WrongPass123!");
         var result = await _service.LoginWebAsync(request);
 
-        result.Should().BeNull();
+        result.Should().NotBeNull();
+        result.Error.Should().Be("Credenciales inválidas");
+        result.Response.Should().BeNull();
     }
 
     [Fact]
-    public async Task LoginWebAsync_UsuarioInactivo_RetornaNull()
+    public async Task LoginWebAsync_UsuarioInactivo_RetornaErrorVerificacion()
     {
         var user = new UsuarioWeb
         {
@@ -202,7 +205,9 @@ public class AuthServiceTests
         var request = new LoginWebRequest("test@test.com", "Password123!");
         var result = await _service.LoginWebAsync(request);
 
-        result.Should().BeNull();
+        result.Should().NotBeNull();
+        result.Error.Should().Contain("verificado");
+        result.Response.Should().BeNull();
     }
 
     [Fact]
@@ -229,9 +234,10 @@ public class AuthServiceTests
         var result = await _service.LoginWebAsync(request);
 
         result.Should().NotBeNull();
-        result!.Rol.Should().Be("admin");
+        result.Error.Should().BeNull();
+        result.Response!.Rol.Should().Be("admin");
 
-        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Response.Token);
         jwt.Claims.Single(c => c.Type == ClaimTypes.Role).Value.Should().Be("admin");
     }
 
@@ -259,9 +265,10 @@ public class AuthServiceTests
         var result = await _service.LoginWebAsync(request);
 
         result.Should().NotBeNull();
-        result!.Rol.Should().Be("dueno");
+        result.Error.Should().BeNull();
+        result.Response!.Rol.Should().Be("dueno");
 
-        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Response.Token);
         jwt.Claims.Single(c => c.Type == ClaimTypes.Role).Value.Should().Be("dueno");
     }
 

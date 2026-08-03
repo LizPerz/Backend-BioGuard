@@ -26,6 +26,8 @@ public record AuthResponse(string Token, string UserId, string Nombre, string Ro
 
 public record RegisterResult(AuthResponse? Response, string? Error);
 
+public record LoginResult(AuthResponse? Response, string? Error);
+
 public record RefreshTokenRequest(
     [Required] string RefreshToken);
 
