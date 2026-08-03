@@ -44,3 +44,18 @@ services:
       - key: FIREBASE_SERVER_KEY
         value: ${FIREBASE_SERVER_KEY}
         type: SECRET
+      - key: SMTP_HOST
+        value: ${SMTP_HOST}
+        type: SECRET
+      - key: SMTP_PORT
+        value: ${SMTP_PORT}
+        type: SECRET
+      - key: SMTP_USER
+        value: ${SMTP_USER}
+        type: SECRET
+      - key: SMTP_PASSWORD
+        value: ${SMTP_PASSWORD}
+        type: SECRET
+      - key: SMTP_FROM
+        value: ${SMTP_FROM}
+        type: SECRET
