@@ -43,27 +43,27 @@ public class AuthService
 
     // ── Register ───────────────────────────────────────────
 
-    public async Task<AuthResponse?> RegisterWebAsync(RegisterWebRequest request)
+    public async Task<RegisterResult> RegisterWebAsync(RegisterWebRequest request)
     {
         var exists = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
         if (exists != null)
         {
             _logger.LogWarning("Registration attempt with existing email: {Email}", request.Correo);
-            return null;
+            return new RegisterResult(null, "El correo ya está registrado");
         }
 
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Nombre == request.PlanNombre);
         if (plan == null)
         {
             _logger.LogWarning("Registration attempt with invalid plan: {PlanNombre}", request.PlanNombre);
-            return null;
+            return new RegisterResult(null, "El plan seleccionado no existe");
         }
 
         var (passwordValid, passwordError) = PasswordHasher.ValidateComplexity(request.Password);
         if (!passwordValid)
         {
             _logger.LogWarning("Registration with weak password for email: {Correo}", request.Correo);
-            return null;
+            return new RegisterResult(null, passwordError);
         }
 
         var verificationCode = RandomNumberString(6);
@@ -91,7 +91,7 @@ public class AuthService
 
         _logger.LogInformation("User registered (pending verification): {UserId}", user.Id);
 
-        return new AuthResponse("", user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan.Nombre, RequiresVerification: true);
+        return new RegisterResult(new AuthResponse("", user.Id, $"{user.Nombre} {user.ApellidoPaterno}", "dueno", plan.Nombre, RequiresVerification: true), null);
     }
 
     // ── Login Web ──────────────────────────────────────────

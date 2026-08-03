@@ -24,6 +24,8 @@ public record LoginCodigoRequest(
 
 public record AuthResponse(string Token, string UserId, string Nombre, string Rol, string Plan, bool Requires2FA = false, bool RequiresVerification = false, string? RefreshToken = null);
 
+public record RegisterResult(AuthResponse? Response, string? Error);
+
 public record RefreshTokenRequest(
     [Required] string RefreshToken);
 

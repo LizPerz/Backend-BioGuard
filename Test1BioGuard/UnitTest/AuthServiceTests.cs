@@ -81,13 +81,14 @@ public class AuthServiceTests
         var result = await _service.RegisterWebAsync(request);
 
         result.Should().NotBeNull();
-        result!.RequiresVerification.Should().BeTrue();
-        result.Rol.Should().Be("dueno");
-        result.Plan.Should().Be("Premium");
+        result.Error.Should().BeNull();
+        result.Response!.RequiresVerification.Should().BeTrue();
+        result.Response.Rol.Should().Be("dueno");
+        result.Response.Plan.Should().Be("Premium");
     }
 
     [Fact]
-    public async Task RegisterWebAsync_CorreoExistente_RetornaNull()
+    public async Task RegisterWebAsync_CorreoExistente_RetornaError()
     {
         var existing = new UsuarioWeb { Correo = "juan@test.com", Activo = true };
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
@@ -98,11 +99,13 @@ public class AuthServiceTests
         var request = new RegisterWebRequest("Juan", "Perez", "juan@test.com", "Password123!", "Premium", "Lopez");
         var result = await _service.RegisterWebAsync(request);
 
-        result.Should().BeNull();
+        result.Should().NotBeNull();
+        result.Error.Should().Be("El correo ya está registrado");
+        result.Response.Should().BeNull();
     }
 
     [Fact]
-    public async Task RegisterWebAsync_PlanNoExiste_RetornaNull()
+    public async Task RegisterWebAsync_PlanNoExiste_RetornaError()
     {
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
                 It.IsAny<IMongoCollection<UsuarioWeb>>(),
@@ -116,7 +119,29 @@ public class AuthServiceTests
         var request = new RegisterWebRequest("Juan", "Perez", "juan@test.com", "Password123!", "Inexistente", "Lopez");
         var result = await _service.RegisterWebAsync(request);
 
-        result.Should().BeNull();
+        result.Should().NotBeNull();
+        result.Error.Should().Be("El plan seleccionado no existe");
+        result.Response.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RegisterWebAsync_PasswordDebil_RetornaError()
+    {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync((UsuarioWeb?)null);
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(new Plan { Id = "plan1", Nombre = "Premium" });
+
+        var request = new RegisterWebRequest("Juan", "Perez", "juan@test.com", "PASSWORD123!", "Premium", "Lopez");
+        var result = await _service.RegisterWebAsync(request);
+
+        result.Should().NotBeNull();
+        result.Error.Should().Contain("minúscula");
+        result.Response.Should().BeNull();
     }
 
     [Fact]
