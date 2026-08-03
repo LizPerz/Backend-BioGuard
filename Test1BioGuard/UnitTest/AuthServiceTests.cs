@@ -105,6 +105,77 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task RegisterWebAsync_CorreoExistenteCaseInsensitive_RetornaError()
+    {
+        var existing = new UsuarioWeb { Correo = "juan@test.com", Activo = true };
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(existing);
+
+        var request = new RegisterWebRequest("Juan", "Perez", "JUAN@TEST.COM", "Password123!", "Premium", "Lopez");
+        var result = await _service.RegisterWebAsync(request);
+
+        result.Should().NotBeNull();
+        result.Error.Should().Be("El correo ya está registrado");
+        result.Response.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RegisterWebAsync_NombreSoloEspacios_RetornaError()
+    {
+        var request = new RegisterWebRequest("   ", "Perez", "juan@test.com", "Password123!", "Premium", "Lopez");
+        var result = await _service.RegisterWebAsync(request);
+
+        result.Should().NotBeNull();
+        result.Error.Should().Be("El nombre es obligatorio");
+        result.Response.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RegisterWebAsync_ApellidoConDigitos_RetornaError()
+    {
+        var request = new RegisterWebRequest("Juan", "Perez123", "juan@test.com", "Password123!", "Premium", "Lopez");
+        var result = await _service.RegisterWebAsync(request);
+
+        result.Should().NotBeNull();
+        result.Error.Should().Be("El apellido solo puede contener letras y espacios");
+        result.Response.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RegisterWebAsync_NormalizaCorreoYNombre()
+    {
+        var plan = new Plan { Id = "plan1", Nombre = "Premium" };
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync((UsuarioWeb?)null);
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(plan);
+
+        UsuarioWeb? inserted = null;
+        _mockUsuarios.Setup(c => c.InsertOneAsync(
+                It.IsAny<UsuarioWeb>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<UsuarioWeb, InsertOneOptions, CancellationToken>((u, _, _) => inserted = u)
+            .Returns(Task.CompletedTask);
+
+        var request = new RegisterWebRequest("  Juan  ", "De la Cruz", "  JUAN@TEST.COM  ", "Password123!", "Premium", "Lopez");
+        var result = await _service.RegisterWebAsync(request);
+
+        result.Should().NotBeNull();
+        result.Error.Should().BeNull();
+        inserted.Should().NotBeNull();
+        inserted!.Correo.Should().Be("juan@test.com");
+        inserted.Nombre.Should().Be("Juan");
+        inserted.ApellidoPaterno.Should().Be("De la Cruz");
+    }
+
+    [Fact]
     public async Task RegisterWebAsync_PlanNoExiste_RetornaError()
     {
         _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
