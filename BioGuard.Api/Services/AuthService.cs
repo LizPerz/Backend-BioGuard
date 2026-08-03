@@ -96,19 +96,25 @@ public class AuthService
 
     // ── Login Web ──────────────────────────────────────────
 
-    public async Task<AuthResponse?> LoginWebAsync(LoginWebRequest request)
+    public async Task<LoginResult> LoginWebAsync(LoginWebRequest request)
     {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == request.Correo);
-        if (user == null || !user.Activo)
+        if (user == null)
         {
-            _logger.LogWarning("Login attempt for inactive or non-existent user: {Email}", request.Correo);
-            return null;
+            _logger.LogWarning("Login attempt for non-existent user: {Email}", request.Correo);
+            return new LoginResult(null, "Credenciales inválidas");
+        }
+
+        if (!user.Activo)
+        {
+            _logger.LogWarning("Login attempt for unverified user: {Email}", request.Correo);
+            return new LoginResult(null, "Tu correo aún no ha sido verificado. Revisa tu bandeja de entrada y confirma el código de verificación.");
         }
 
         if (user.LockedUntil != null && user.LockedUntil > DateTime.UtcNow)
         {
             _logger.LogWarning("Login blocked - account locked until {LockedUntil}", user.LockedUntil);
-            return null;
+            return new LoginResult(null, "Cuenta bloqueada temporalmente por intentos fallidos. Inténtalo más tarde.");
         }
 
         if (!PasswordHasher.Verify(request.Password, user.PasswordHash))
@@ -124,7 +130,7 @@ public class AuthService
             }
             await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
             _logger.LogWarning("Invalid password for user: {UserId}", user.Id);
-            return null;
+            return new LoginResult(null, "Credenciales inválidas");
         }
 
         if (user.FailedLoginAttempts > 0 || user.LockedUntil != null)
@@ -145,7 +151,7 @@ public class AuthService
                 .Set(u => u.TwoFactorVerificado, false);
             await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update2fa);
             _logger.LogInformation("2FA required for user: {UserId}", user.Id);
-            return new AuthResponse("", user.Id, "", "", "", Requires2FA: true);
+            return new LoginResult(new AuthResponse("", user.Id, "", "", "", Requires2FA: true), null);
         }
 
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
@@ -154,7 +160,7 @@ public class AuthService
         var refreshToken = await CreateAndStoreRefreshTokenAsync(user.Id, role);
         _logger.LogInformation("User logged in successfully: {UserId}", user.Id);
 
-        return new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", role, plan?.Nombre ?? "Sin plan", RefreshToken: refreshToken);
+        return new LoginResult(new AuthResponse(token, user.Id, $"{user.Nombre} {user.ApellidoPaterno}", role, plan?.Nombre ?? "Sin plan", RefreshToken: refreshToken), null);
     }
 
     // ── Login Google ───────────────────────────────────────
