@@ -26,5 +26,8 @@ jobs:
           IMAGE_DIGEST: ${{ inputs.image_digest }}
           MONGODB_CONNECTION_STRING: ${{ secrets.MONGODB_CONNECTION_STRING }}
           JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          FROM_NAME: ${{ secrets.FROM_NAME }}
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
