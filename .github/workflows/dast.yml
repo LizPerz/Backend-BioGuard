@@ -60,7 +60,7 @@ jobs:
           artifact_name: 'zap-baseline-report'
 
       - name: ZAP API Scan
-        uses: zaproxy/action-api-scan@bd24b11e76da11ab60302c8ae87f091cbb11f034 # v0.10.0
+        uses: zaproxy/action-api-scan@5158fe4d9d8fcc75ea204db81317cce7f9e5453d # v0.10.0
         with:
           target: ${{ steps.target.outputs.url }}
           format: openapi
