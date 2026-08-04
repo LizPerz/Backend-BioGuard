@@ -25,7 +25,7 @@ public class Cuidador
 
     [BsonElement("usuario_vinculado_id")]
     [BsonRepresentation(BsonType.ObjectId)]
-    public string UsuarioVinculadoId { get; set; } = string.Empty;
+    public string? UsuarioVinculadoId { get; set; }
 
     [BsonElement("nombre")]
     public string Nombre { get; set; } = string.Empty;
