@@ -61,6 +61,15 @@ services:
       - key: SMTP_FROM
         value: ${SMTP_FROM}
         type: SECRET
+      - key: SENDGRID_API_KEY
+        value: ${SENDGRID_API_KEY}
+        type: SECRET
+      - key: FROM_EMAIL
+        value: ${FROM_EMAIL}
+        type: SECRET
+      - key: FROM_NAME
+        value: ${FROM_NAME}
+        type: SECRET
 
   - name: bioguard-ml
     image:
