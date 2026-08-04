@@ -31,7 +31,7 @@ public class FirebasePushNotificationService : IPushNotificationService
                 {
                     FirebaseApp.Create(new AppOptions
                     {
-                        Credential = GoogleCredential.FromJson(serviceAccountJson)
+                        Credential = CredentialFactory.FromJson<GoogleCredential>(serviceAccountJson)
                     });
                 }
                 _logger.LogInformation("Firebase Admin SDK initialized from JSON");
@@ -44,7 +44,7 @@ public class FirebasePushNotificationService : IPushNotificationService
                 {
                     FirebaseApp.Create(new AppOptions
                     {
-                        Credential = GoogleCredential.FromFile(credPath)
+                        Credential = CredentialFactory.FromFile<GoogleCredential>(credPath)
                     });
                 }
                 _logger.LogInformation("Firebase Admin SDK initialized from file: {Path}", credPath);
@@ -69,7 +69,7 @@ public class FirebasePushNotificationService : IPushNotificationService
         {
             var mensaje = new Message
             {
-                Token = token,
+                Fid = token,
                 Notification = new Notification { Title = titulo, Body = cuerpo },
                 Data = datos ?? new Dictionary<string, string>(),
                 Android = new AndroidConfig
@@ -118,7 +118,7 @@ public class FirebasePushNotificationService : IPushNotificationService
         {
             var mensaje = new MulticastMessage
             {
-                Tokens = tokens.Where(t => !string.IsNullOrWhiteSpace(t)).ToList(),
+                Fids = tokens.Where(t => !string.IsNullOrWhiteSpace(t)).ToList(),
                 Notification = new Notification { Title = titulo, Body = cuerpo },
                 Data = datos ?? new Dictionary<string, string>(),
                 Android = new AndroidConfig
