@@ -59,6 +59,7 @@ public class CuidadorService
             UsuarioWebId = usuarioId,
             PacienteId = pacienteId,
             CodigoAccesoQr = codigo,
+            CodigoExpira = DateTime.UtcNow.AddMinutes(10),
             Nombre = nombre,
             Parentesco = parentesco,
             Telefono = telefono,
@@ -106,7 +107,9 @@ public class CuidadorService
     public async Task<string> RegenerarQRAsync(string id)
     {
         var codigo = GenerarCodigo();
-        var update = Builders<Cuidador>.Update.Set(c => c.CodigoAccesoQr, codigo);
+        var update = Builders<Cuidador>.Update
+            .Set(c => c.CodigoAccesoQr, codigo)
+            .Set(c => c.CodigoExpira, DateTime.UtcNow.AddMinutes(10));
         await _db.Cuidadores.UpdateOneAsync(c => c.Id == id, update);
         _logger.LogInformation("QR regenerated for caregiver: {CuidadorId}", id);
         return codigo;

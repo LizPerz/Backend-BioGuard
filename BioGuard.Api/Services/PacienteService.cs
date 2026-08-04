@@ -68,6 +68,7 @@ public class PacienteService
         {
             UsuarioWebId = usuarioWebId,
             CodigoAccesoQr = codigo,
+            CodigoExpira = DateTime.UtcNow.AddMinutes(10),
             Nombre = request.Nombre,
             FechaNacimiento = request.FechaNacimiento,
             FechaRegistro = DateTime.UtcNow,
@@ -129,7 +130,9 @@ public class PacienteService
     public async Task<string> RegenerarQRAsync(string pacienteId)
     {
         var codigo = GenerarCodigo();
-        var update = Builders<Paciente>.Update.Set(p => p.CodigoAccesoQr, codigo);
+        var update = Builders<Paciente>.Update
+            .Set(p => p.CodigoAccesoQr, codigo)
+            .Set(p => p.CodigoExpira, DateTime.UtcNow.AddMinutes(10));
         await _db.Pacientes.UpdateOneAsync(p => p.Id == pacienteId, update);
         _logger.LogInformation("QR regenerated for patient: {PacienteId}", pacienteId);
         return codigo;
