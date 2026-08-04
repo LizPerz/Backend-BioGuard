@@ -1,4 +1,5 @@
 using MongoDB.Driver;
+using MongoDB.Bson;
 using Moq;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Config;
@@ -230,5 +231,25 @@ public class CuidadorServiceTests
                 _mockCollection.Object,
                 It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()),
             Times.Never);
+    }
+
+    [Fact]
+    public void CrearAsync_SinUsuarioVinculado_SerializaSinError()
+    {
+        var cuidador = new Cuidador
+        {
+            Id = "507f1f77bcf86cd799439011",
+            UsuarioWebId = "507f1f77bcf86cd799439012",
+            PacienteId = "507f1f77bcf86cd799439013",
+            CodigoAccesoQr = "CU-ABC123",
+            Nombre = "María García",
+            Parentesco = "Madre",
+            Telefono = "5551234567",
+            Correo = "maria@email.com"
+        };
+
+        var doc = cuidador.ToBsonDocument();
+
+        doc["usuario_vinculado_id"].Should().Be(BsonNull.Value);
     }
 }
