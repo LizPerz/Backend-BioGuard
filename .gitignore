@@ -42,3 +42,9 @@ appsettings.Development.json
 appsettings.*.Local.json
 *.env
 .env.*
+
+## Python / MLServicePython
+__pycache__/
+*.py[cod]
+.pytest_cache/
+MLServicePython/model_data/*.pkl

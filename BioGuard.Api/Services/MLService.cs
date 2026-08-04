@@ -60,6 +60,26 @@ public class MLService
         return recomendaciones;
     }
 
+    public async Task<PrediccionMl> GuardarPrediccionAsync(MLPredictionResponseDto prediccion)
+    {
+        var entidad = new PrediccionMl
+        {
+            PacienteId = prediccion.PacienteId,
+            ProbabilidadPico = prediccion.ProbabilidadPico,
+            NivelRiesgo = prediccion.NivelRiesgo,
+            HorasEstimadas = prediccion.HorasEstimadas,
+            Recomendacion = prediccion.Recomendacion,
+            ModeloVersion = prediccion.ModeloVersion,
+            FechaPrediccion = prediccion.FechaPrediccion,
+            FechaExpiracion = prediccion.FechaExpiracion
+        };
+
+        _logger.LogInformation("Guardando predicción ML para paciente {PacienteId}", entidad.PacienteId);
+        await _db.PrediccionesMl.InsertOneAsync(entidad);
+        _logger.LogInformation("Predicción ML guardada con ID {PrediccionId}", entidad.Id);
+        return entidad;
+    }
+
     public async Task<List<ModeloMl>> ObtenerModelosAsync()
     {
         _logger.LogInformation("Obteniendo modelos ML");
