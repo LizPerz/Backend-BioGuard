@@ -68,7 +68,7 @@ public class EmailService : IEmailService
 
             if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(pass))
             {
-                _logger.LogWarning("SMTP not configured - email to {Email} skipped. Subject: {Subject}", toEmail, subject);
+                _logger.LogWarning("SMTP not configured - email skipped. Subject: {Subject}", subject);
                 return false;
             }
 
@@ -88,12 +88,12 @@ public class EmailService : IEmailService
             await client.SendAsync(message);
             await client.DisconnectAsync(true);
 
-            _logger.LogInformation("Email sent to {Email}, subject: {Subject}", toEmail, subject);
+            _logger.LogInformation("Email sent. Subject: {Subject}", subject);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send email to {Email}", toEmail);
+            _logger.LogError(ex, "Failed to send email");
             return false;
         }
     }
