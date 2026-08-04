@@ -1,0 +1,14 @@
+name: "BioGuard CodeQL configuration"
+
+# Paths ignorados: el proyecto de tests no es código en producción.
+paths-ignore:
+  - "Test1BioGuard"
+
+# La query cs/log-forging marca TODOS los mensajes de logging estructurado
+# de ILogger<T> ("... {X}", valor) por depender de valores de usuario, incluso
+# usando placeholders (no interpolación de format string). En este repositorio
+# todo el logging usa structured logging, así que se excluye como falso positivo.
+# El resto de queries de security-extended (inyección, secretos, etc.) siguen activas.
+query-filters:
+  - exclude:
+      id: cs/log-forging

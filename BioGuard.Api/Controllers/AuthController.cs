@@ -36,7 +36,7 @@ public class AuthController : ControllerBase
         var result = await _authService.RegisterWebAsync(request);
         if (result.Error != null)
         {
-            _logger.LogWarning("Register failed for email: {Correo} - {Error}", request.Correo, result.Error);
+            _logger.LogWarning("Register failed for email: {Correo}", request.Correo);
             return BadRequest(new { message = result.Error });
         }
         var registerResult = result.Response!;

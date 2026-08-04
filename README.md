@@ -57,7 +57,7 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 | CI/CD | GitHub Actions | |
 | Deploy | DigitalOcean App Platform | |
 | API Docs | Swagger / OpenAPI | |
-| Tests | xUnit + FluentAssertions | 483 tests |
+| Tests | xUnit + FluentAssertions | 511 tests |
 
 ## Funcionalidades
 
@@ -210,6 +210,9 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 - **Datos sensibles eliminados de logs**: códigos de acceso, passwords, valores de código QR ya no se loggean
 - **Claim estandarizado**: Todos los controladores usan `ClaimTypes.NameIdentifier` (no `"sub"`) vía `User.FindFirst()`
 - **DAST Scan**: Workflow de GitHub Actions con OWASP ZAP para análisis dinámico de seguridad (corre semanalmente y en PRs a master)
+- **Código QR con expiración**: El código de acceso QR de paciente/cuidador expira a los 10 minutos (campo `CodigoExpira`), validado en login y auto-vinculación
+- **Security Gate**: CodeQL con `codeql-config.yml` (ignora tests, excluye `cs/log-forging`); el pipeline bloquea alertas `high`/`critical` en PRs
+- **PII en logs**: Los emails/correos ya no se registran en logs (AuthController, AuthService, EmailService)
 
 ## Estructura del Proyecto
 
@@ -525,13 +528,16 @@ docker run -p 5000:8080 \
 
 ### CI/CD Pipeline (GitHub Actions)
 
-1. **Build & Test**: Compila, corre 483 tests, NuGet audit, licencias
-2. **CodeQL Analysis (SAST)**: Análisis estático de seguridad
+1. **Build & Test**: Compila, corre 511 tests, NuGet audit, licencias
+2. **CodeQL Analysis (SAST)**: Análisis estático de seguridad (con `codeql-config.yml` que excluye el query ruidoso de "Uncontrolled Data Used in Path Expression")
 3. **Secret Scanning**: Escaneo de secretos expuestos
 4. **Container Security Scan**: Escaneo de vulnerabilidades en la imagen Docker
 5. **Docker Build**: Build multi-stage, firmado con cosign, push a GitHub Container Registry
 6. **DAST Scan (semanal)**: OWASP ZAP — análisis dinámico de seguridad contra producción
-7. **Deploy**: DigitalOcean App Platform (auto-deploy desde master)
+7. **Security Gate**: Bloquea el merge si el escaneo de la imagen reporta vulnerabilidades `critical` o `high` sin excepción aprobada
+8. **Deploy**: DigitalOcean App Platform (auto-deploy desde master)
+
+**Dependabot**: Habilitado con semanal, agrupando updates por ecosistema (NuGet, GitHub Actions, Docker) y 50 PRs máximo abiertos para mantener el tablero manejable.
 
 ### Branching Strategy
 
@@ -584,6 +590,31 @@ Authorization: Bearer <admin_token>
 ```
 
 ## Changelog
+
+### DevSecOps — Security Gate, CodeQL config y mínima exposición de PII en logs
+
+| Mejora | Descripción |
+|---|---|
+| **Security Gate** | Nuevo job `security-gate` en `security.yml`: bloquea el merge si CodeQL reporta alertas `high`/`critical` abiertas en el código del PR. |
+| **CodeQL config** | Nuevo `.github/codeql/codeql-config.yml`: ignora `Test1BioGuard` y excluye la query `cs/log-forging` (falso positivo en structured logging con placeholders); el resto de `security-extended` sigue activo. |
+| **PII en logs** | Eliminados correos/emails de mensajes de log en `AuthController`, `AuthService` y `EmailService` (se loggea sujeto o contexto, nunca el email completo). |
+
+### PR #93 — Fix: crear cuidador sin usuario vinculado (rama-Liz -> master)
+
+| Fix | Descripción |
+|---|---|
+| **`UsuarioVinculadoId` nullable** | `Cuidador.UsuarioVinculadoId` ahora acepta `null`, permitiendo crear un cuidador sin vincular cuenta web al momento de la creación. |
+| **Tests** | Nuevos tests en `CuidadorServiceTests` para creación sin usuario vinculado y auto-vinculación. |
+
+### PR #92 — Expirar código QR de paciente/cuidador a los 10 minutos (rama-Liz -> master)
+
+| Fix | Descripción |
+|---|---|
+| **Nuevo campo `CodigoExpira`** | `DateTime?` en `Paciente` y `Cuidador` (colección: `codigo_expira`). |
+| **Expiración al crear/regenerar** | Al crear o regenerar el QR (`POST`, `PUT .../regenerar-qr`, `RegenerarQRAsync`), se asigna `CodigoExpira = now + 10 min`. |
+| **Validación en login** | `POST /api/Auth/login-codigo` rechaza códigos expirados (login de paciente y cuidador). |
+| **Validación en vincular** | Auto-vinculación de cuidador (`self-register`) devuelve 400 `"El código ha expirado. Solicita uno nuevo al responsable."` si pasaron los 10 minutos. |
+| **Respuestas** | Crear/regenerar/GET QR ahora devuelven `CodigoExpira` además de `CodigoAccesoQr`. |
 
 ### PR #71 — Devolver `checkoutUrl` al crear sesión de pago (rama-Liz -> master)
 

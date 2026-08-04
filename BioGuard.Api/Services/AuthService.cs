@@ -202,7 +202,7 @@ public class AuthService
 
         if (user != null && !user.Activo)
         {
-            _logger.LogWarning("Google login attempt for inactive user: {Email}", email);
+            _logger.LogWarning("Google login attempt for inactive user");
             return null;
         }
 
