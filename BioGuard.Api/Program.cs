@@ -212,6 +212,12 @@ builder.Services.Configure<StripeOptions>(options =>
 });
 builder.Services.Configure<FirebaseOptions>(builder.Configuration.GetSection("Firebase"));
 builder.Services.Configure<ImgBbOptions>(builder.Configuration.GetSection("ImgBB"));
+builder.Services.Configure<MLOptions>(options =>
+{
+    builder.Configuration.GetSection("ML").Bind(options);
+    if (string.IsNullOrEmpty(options.BaseUrl))
+        options.BaseUrl = Environment.GetEnvironmentVariable("ML_API_URL") ?? "";
+});
 
 // =============================================
 // SERVICES (Dependency Injection)
@@ -225,6 +231,7 @@ builder.Services.AddScoped<CuidadorService>();
 builder.Services.AddScoped<DispositivoService>();
 builder.Services.AddScoped<NotificacionService>();
 builder.Services.AddScoped<MLService>();
+builder.Services.AddHttpClient<MLPredictionClient>();
 builder.Services.AddScoped<AuditoriaService>();
 builder.Services.AddScoped<MedicamentoService>();
 builder.Services.AddScoped<AlertaService>();

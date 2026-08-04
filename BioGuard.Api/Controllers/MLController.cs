@@ -20,12 +20,21 @@ namespace BioGuard.Api.Controllers;
 public class MLController : ControllerBase
 {
     private readonly MLService _mlService;
+    private readonly MLPredictionClient _mlPredictionClient;
+    private readonly SensorService _sensorService;
     private readonly OwnershipHelper _ownershipHelper;
     private readonly ILogger<MLController> _logger;
 
-    public MLController(MLService mlService, OwnershipHelper ownershipHelper, ILogger<MLController> logger)
+    public MLController(
+        MLService mlService,
+        MLPredictionClient mlPredictionClient,
+        SensorService sensorService,
+        OwnershipHelper ownershipHelper,
+        ILogger<MLController> logger)
     {
         _mlService = mlService;
+        _mlPredictionClient = mlPredictionClient;
+        _sensorService = sensorService;
         _ownershipHelper = ownershipHelper;
         _logger = logger;
     }
@@ -215,25 +224,61 @@ public class MLController : ControllerBase
         }
 
         _logger.LogInformation("Running ML diagnosis for patient {PacienteId}", request.PacienteId);
-        var predicciones = await _mlService.ObtenerPrediccionesAsync(request.PacienteId);
-        var prediccion = predicciones.FirstOrDefault();
 
+        var lecturas = await _sensorService.ObtenerLecturasAsync(request.PacienteId, limite: 100);
+        if (lecturas.Count == 0)
+        {
+            _logger.LogWarning("No sensor readings for diagnosis on patient {PacienteId}", request.PacienteId);
+            return Ok(new { message = "Sin lecturas de sensores para diagnóstico" });
+        }
+
+        if (!_mlPredictionClient.IsConfigured)
+        {
+            _logger.LogWarning("ML service not configured, returning stored prediction for patient {PacienteId}", request.PacienteId);
+            var stored = await _mlService.ObtenerPrediccionActualAsync(request.PacienteId);
+            if (stored == null)
+                return StatusCode(503, new { message = "Microservicio ML no configurado" });
+            return Ok(MapearPrediccion(request.PacienteId, stored));
+        }
+
+        var prediccion = await _mlPredictionClient.PredecirAsync(request.PacienteId, lecturas);
         if (prediccion == null)
         {
-            _logger.LogWarning("Insufficient data for diagnosis on patient {PacienteId}", request.PacienteId);
-            return Ok(new { message = "Sin datos suficientes para diagnóstico" });
+            _logger.LogWarning("ML service unavailable for patient {PacienteId}", request.PacienteId);
+            var stored = await _mlService.ObtenerPrediccionActualAsync(request.PacienteId);
+            if (stored == null)
+                return StatusCode(503, new { message = "Microservicio ML no disponible y sin predicción previa" });
+            return Ok(MapearPrediccion(request.PacienteId, stored));
         }
+
+        var guardada = await _mlService.GuardarPrediccionAsync(prediccion);
 
         return Ok(new
         {
             PacienteId = request.PacienteId,
+            guardada.NivelRiesgo,
+            Probabilidad = guardada.ProbabilidadPico,
+            guardada.Recomendacion,
+            guardada.HorasEstimadas,
+            guardada.FechaPrediccion,
+            guardada.FechaExpiracion,
+            guardada.ModeloVersion
+        });
+    }
+
+    private static object MapearPrediccion(string pacienteId, PrediccionMl prediccion)
+    {
+        return new
+        {
+            PacienteId = pacienteId,
             prediccion.NivelRiesgo,
             Probabilidad = prediccion.ProbabilidadPico,
             prediccion.Recomendacion,
             prediccion.HorasEstimadas,
             prediccion.FechaPrediccion,
+            prediccion.FechaExpiracion,
             prediccion.ModeloVersion
-        });
+        };
     }
 
     /// <summary>

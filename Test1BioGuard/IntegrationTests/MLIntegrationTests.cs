@@ -19,6 +19,7 @@ public class MLIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     private readonly Mock<IMongoCollection<ModeloMl>> _mockModelos;
     private readonly Mock<IMongoCollection<Paciente>> _mockPacientes;
     private readonly Mock<IMongoCollection<Cuidador>> _mockCuidadores;
+    private readonly Mock<IMongoCollection<LecturaSensor>> _mockLecturas;
 
     public MLIntegrationTests(CustomWebApplicationFactory factory)
     {
@@ -29,11 +30,13 @@ public class MLIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         _mockModelos = new Mock<IMongoCollection<ModeloMl>>();
         _mockPacientes = new Mock<IMongoCollection<Paciente>>();
         _mockCuidadores = new Mock<IMongoCollection<Cuidador>>();
+        _mockLecturas = new Mock<IMongoCollection<LecturaSensor>>();
 
         _mockDb.Setup(db => db.PrediccionesMl).Returns(_mockPredicciones.Object);
         _mockDb.Setup(db => db.ModelosMl).Returns(_mockModelos.Object);
         _mockDb.Setup(db => db.Pacientes).Returns(_mockPacientes.Object);
         _mockDb.Setup(db => db.Cuidadores).Returns(_mockCuidadores.Object);
+        _mockDb.Setup(db => db.LecturasSensores).Returns(_mockLecturas.Object);
     }
 
     private void SetDuenoAuth(string userId = "user123") => _client.DefaultRequestHeaders.Authorization =
@@ -263,18 +266,28 @@ public class MLIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     {
         SetupOwnership("pac123", "user123");
 
-        var predicciones = new List<PrediccionMl>
+        var lecturas = new List<LecturaSensor>
         {
-            new() { Id = "p1", PacienteId = "pac123", ProbabilidadPico = 0.9, NivelRiesgo = "critico", Recomendacion = "Urgente", HorasEstimadas = 1, FechaPrediccion = DateTime.UtcNow, ModeloVersion = "v1" }
+            new() { Id = "l1", Meta = new MetaData { PacienteId = "pac123" }, Timestamp = DateTime.UtcNow, PulsoBpm = 85, TemperaturaC = 36.8, SudoracionGsr = 3.2, ProbabilidadPico = 0.2 }
         };
 
         _mockDb.Setup(db => db.FindToListAsync(
-                It.IsAny<IMongoCollection<PrediccionMl>>(),
-                It.IsAny<FilterDefinition<PrediccionMl>>(),
-                It.IsAny<SortDefinition<PrediccionMl>?>(),
+                It.IsAny<IMongoCollection<LecturaSensor>>(),
+                It.IsAny<FilterDefinition<LecturaSensor>>(),
+                It.IsAny<SortDefinition<LecturaSensor>?>(),
                 It.IsAny<int?>(),
                 It.IsAny<int?>()))
-            .ReturnsAsync(predicciones);
+            .ReturnsAsync(lecturas);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<PrediccionMl>>(),
+                It.IsAny<FilterDefinition<PrediccionMl>>(),
+                It.IsAny<SortDefinition<PrediccionMl>?>()))
+            .ReturnsAsync(new PrediccionMl
+            {
+                Id = "p1", PacienteId = "pac123", ProbabilidadPico = 0.9, NivelRiesgo = "critico",
+                Recomendacion = "Urgente", HorasEstimadas = 1, FechaPrediccion = DateTime.UtcNow, ModeloVersion = "v1"
+            });
 
         SetDuenoAuth();
         var request = new DiagnosticarRequest("pac123");
@@ -287,17 +300,17 @@ public class MLIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
-    public async Task Diagnosticar_SinPrediccion_Retorna200()
+    public async Task Diagnosticar_SinLecturas_Retorna200()
     {
         SetupOwnership("pac123", "user123");
 
         _mockDb.Setup(db => db.FindToListAsync(
-                It.IsAny<IMongoCollection<PrediccionMl>>(),
-                It.IsAny<FilterDefinition<PrediccionMl>>(),
-                It.IsAny<SortDefinition<PrediccionMl>?>(),
+                It.IsAny<IMongoCollection<LecturaSensor>>(),
+                It.IsAny<FilterDefinition<LecturaSensor>>(),
+                It.IsAny<SortDefinition<LecturaSensor>?>(),
                 It.IsAny<int?>(),
                 It.IsAny<int?>()))
-            .ReturnsAsync(new List<PrediccionMl>());
+            .ReturnsAsync(new List<LecturaSensor>());
 
         SetDuenoAuth();
         var request = new DiagnosticarRequest("pac123");
@@ -306,7 +319,38 @@ public class MLIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(json);
-        doc.RootElement.GetProperty("message").GetString().Should().Be("Sin datos suficientes para diagnóstico");
+        doc.RootElement.GetProperty("message").GetString().Should().Be("Sin lecturas de sensores para diagnóstico");
+    }
+
+    [Fact]
+    public async Task Diagnosticar_SinPrediccionPrevia_Retorna503()
+    {
+        SetupOwnership("pac123", "user123");
+
+        var lecturas = new List<LecturaSensor>
+        {
+            new() { Id = "l1", Meta = new MetaData { PacienteId = "pac123" }, Timestamp = DateTime.UtcNow, PulsoBpm = 85, TemperaturaC = 36.8, SudoracionGsr = 3.2, ProbabilidadPico = 0.2 }
+        };
+
+        _mockDb.Setup(db => db.FindToListAsync(
+                It.IsAny<IMongoCollection<LecturaSensor>>(),
+                It.IsAny<FilterDefinition<LecturaSensor>>(),
+                It.IsAny<SortDefinition<LecturaSensor>?>(),
+                It.IsAny<int?>(),
+                It.IsAny<int?>()))
+            .ReturnsAsync(lecturas);
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<PrediccionMl>>(),
+                It.IsAny<FilterDefinition<PrediccionMl>>(),
+                It.IsAny<SortDefinition<PrediccionMl>?>()))
+            .ReturnsAsync((PrediccionMl?)null);
+
+        SetDuenoAuth();
+        var request = new DiagnosticarRequest("pac123");
+        var response = await _client.PostAsJsonAsync("/api/ML/diagnosticar", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
     }
 
     [Fact]

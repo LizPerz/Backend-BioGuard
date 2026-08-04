@@ -118,6 +118,38 @@ public class MLServiceTests
     }
 
     [Fact]
+    public async Task GuardarPrediccionAsync_RespuestaValida_GuardaYRetornaEntidad()
+    {
+        var respuesta = new MLPredictionResponseDto
+        {
+            PacienteId = "123456789012345678901234",
+            ProbabilidadPico = 0.75,
+            NivelRiesgo = "Pre-Pico",
+            HorasEstimadas = 2,
+            Recomendacion = "Mantener hidratación",
+            ModeloVersion = "fallback-v1",
+            FechaPrediccion = DateTime.UtcNow,
+            FechaExpiracion = DateTime.UtcNow.AddHours(2)
+        };
+
+        _mockPredicciones.Setup(c => c.InsertOneAsync(
+                It.IsAny<PrediccionMl>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await _service.GuardarPrediccionAsync(respuesta);
+
+        result.Should().NotBeNull();
+        result.PacienteId.Should().Be("123456789012345678901234");
+        result.ProbabilidadPico.Should().Be(0.75);
+        result.NivelRiesgo.Should().Be("Pre-Pico");
+        result.HorasEstimadas.Should().Be(2);
+        result.Recomendacion.Should().Be("Mantener hidratación");
+        result.ModeloVersion.Should().Be("fallback-v1");
+    }
+
+    [Fact]
     public async Task ObtenerPrediccionesAsync_ConPredicciones_RetornaLista()
     {
         var predicciones = new List<PrediccionMl>

@@ -57,7 +57,8 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 | CI/CD | GitHub Actions | |
 | Deploy | DigitalOcean App Platform | |
 | API Docs | Swagger / OpenAPI | |
-| Tests | xUnit + FluentAssertions | 511 tests |
+| Tests | xUnit + FluentAssertions | 518 tests |
+| ML Service | Python / FastAPI | 3.12 (microservicio `MLServicePython/`) |
 
 ## Funcionalidades
 
@@ -112,11 +113,11 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 - Exportar lecturas a CSV
 
 ### Módulo 8: Machine Learning
-- Predicciones de riesgo metabólico
-- Recomendaciones personalizadas
-- Entrenamiento y re-entrenamiento de modelos
-- Diagnósticos puntuales
-- Métricas de modelos
+- **Microservicio Python** (`MLServicePython/`, FastAPI): endpoint `POST /api/v1/predicciones` (glucosa + telemetría: pulso, temperatura, sudoración) y `POST /api/v1/train`. **Predictor v0**: baseline heurístico basado en rangos clínicos (fallback sin modelo entrenado), sustituible por el modelo entrenado cuando haya volumen histórico.
+- **Integración .NET → Python**: `MLPredictionClient` (HttpClient tipado) envía las últimas 100 lecturas del paciente y guarda la respuesta en `predicciones_ml` vía `MLService.GuardarPrediccionAsync`.
+- **Config**: sección `"ML"` en `appsettings.json` (`BaseUrl`, `TimeoutSeconds`) o variable de entorno `ML_API_URL`.
+- **Fallback resiliente**: si el microservicio no está configurado/disponible, `POST /api/ML/diagnosticar` devuelve la última predicción almacenada o `503`.
+- Predicciones de riesgo metabólico, recomendaciones personalizadas, entrenamiento y re-entrenamiento de modelos, diagnósticos puntuales, métricas de modelos.
 
 ### Módulo 9: Pagos y Planes
 - 3 planes: Gratis ($0), Familiar ($1 MXN), Pro ($2 MXN) — suscripciones mensuales
@@ -265,6 +266,15 @@ BioGuard.Api/
 ├── appsettings.json       # Configuración + JWT secrets
 ├── Dockerfile             # Multi-stage build
 └── BioGuard.Api.csproj    # .NET 9 project
+
+MLServicePython/
+├── app/
+│   ├── main.py            # FastAPI: /health, /api/v1/train, /api/v1/predicciones
+│   ├── ml.py              # Predictor v0 (heurístico) + modelo GradientBoosting
+│   └── schemas.py         # Pydantic models
+├── Dockerfile             # python:3.12-slim, puerto 8000
+├── requirements.txt
+└── tests/                 # pytest (4 tests)
 ```
 
 ## Base de Datos (MongoDB Atlas)
@@ -525,17 +535,18 @@ docker run -p 5000:8080 \
 | `SMTP_FROM` | Email remitente |
 | `Stripe__SecretKey` o `STRIPE_SECRET_KEY` | Clave secreta de Stripe (`sk_test_...` / `sk_live_...`) |
 | `Stripe__WebhookSecret` o `STRIPE_WEBHOOK_SECRET` | Secreto del webhook de Stripe (`whsec_...`) |
+| `ML_API_URL` | URL base del microservicio Python (`http://bioguard-ml:8080` en DO App Platform; `http://bioguard-ml:8000` en docker-compose) |
 
 ### CI/CD Pipeline (GitHub Actions)
 
-1. **Build & Test**: Compila, corre 511 tests, NuGet audit, licencias
+1. **Build & Test**: Compila, corre 518 tests, NuGet audit, licencias, **tests del microservicio Python (pytest)**
 2. **CodeQL Analysis (SAST)**: Análisis estático de seguridad (con `codeql-config.yml` que excluye el query ruidoso de "Uncontrolled Data Used in Path Expression")
 3. **Secret Scanning**: Escaneo de secretos expuestos
 4. **Container Security Scan**: Escaneo de vulnerabilidades en la imagen Docker
-5. **Docker Build**: Build multi-stage, firmado con cosign, push a GitHub Container Registry
+5. **Docker Build**: Build multi-stage de la API **y del microservicio ML** (`ghcr.io/lizperz/backend-bioguard-ml`), firmado con cosign, push a GitHub Container Registry
 6. **DAST Scan (semanal)**: OWASP ZAP — análisis dinámico de seguridad contra producción
 7. **Security Gate**: Bloquea el merge si el escaneo de la imagen reporta vulnerabilidades `critical` o `high` sin excepción aprobada
-8. **Deploy**: DigitalOcean App Platform (auto-deploy desde master)
+8. **Deploy**: DigitalOcean App Platform (auto-deploy desde master) — app con 2 servicios: `bioguard-api` + `bioguard-ml`
 
 **Dependabot**: Habilitado con semanal, agrupando updates por ecosistema (NuGet, GitHub Actions, Docker) y 50 PRs máximo abiertos para mantener el tablero manejable.
 
@@ -590,6 +601,18 @@ Authorization: Bearer <admin_token>
 ```
 
 ## Changelog
+
+### Integración Microservicio ML Python ↔ .NET (rama-Liz -> master)
+
+| Mejora | Descripción |
+|---|---|
+| **`MLPredictionClient`** | Nuevo `BioGuard.Api/Services/MLPredictionClient.cs`: HttpClient tipado que envía las últimas 100 lecturas a `POST /api/v1/predicciones` del microservicio Python y normaliza fechas UTC. |
+| **`MLOptions`** | Nueva sección `"ML"` en `appsettings.json` (`BaseUrl`, `TimeoutSeconds`) con fallback a env var `ML_API_URL` en `Program.cs`. |
+| **`MLService.GuardarPrediccionAsync`** | Persiste la respuesta del microservicio en `predicciones_ml`. |
+| **`POST /api/ML/diagnosticar`** | Ahora llama al microservicio real: sin lecturas → `200 "Sin lecturas..."`; microservicio no configurado/no disponible → última predicción almacenada o `503`. |
+| **Tests** | +7 tests (5 `MLPredictionClientTests` con handler stub, 1 `GuardarPrediccionAsync`, 1 `Diagnosticar_SinPrediccionPrevia_Retorna503`). **518 tests .NET + 4 pytest**, todos verdes. |
+| **Deploy** | `.do/app.yaml` con segundo servicio `bioguard-ml` (imagen `ghcr.io/lizperz/backend-bioguard-ml`); `docker-compose.yml` con servicio Python; CI construye/pushea la imagen ML y corre pytest. |
+| **Python** | Fechas de respuesta con timezone UTC (elimina ambigüedad de parseo en .NET); tests sin warnings de deprecación. |
 
 ### DevSecOps — Security Gate, CodeQL config y mínima exposición de PII en logs
 
