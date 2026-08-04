@@ -167,7 +167,7 @@ public class CuidadoresController : ControllerBase
             request.Telefono, request.Correo);
 
         _logger.LogInformation("Cuidador created successfully for user: {UserId}", usuarioId);
-        return Ok(new { CuidadorId = cuidador?.Id ?? "", CodigoAccesoQr = codigo, message = "Cuidador creado" });
+        return Ok(new { CuidadorId = cuidador?.Id ?? "", CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(10), message = "Cuidador creado" });
     }
 
     /// <summary>
@@ -254,7 +254,7 @@ public class CuidadoresController : ControllerBase
         if (cuidador.UsuarioWebId != userId && User.FindFirst(ClaimTypes.Role)?.Value != "admin") return Forbid();
 
         _logger.LogInformation("Fetching QR for cuidador: {CuidadorId}", id);
-        return Ok(new { CodigoAccesoQr = cuidador.CodigoAccesoQr });
+        return Ok(new { CodigoAccesoQr = cuidador.CodigoAccesoQr, CodigoExpira = cuidador.CodigoExpira });
     }
 
     /// <summary>
@@ -274,7 +274,7 @@ public class CuidadoresController : ControllerBase
 
         var codigo = await _cuidadorService.RegenerarQRAsync(id);
         _logger.LogInformation("QR regenerated for cuidador: {CuidadorId}", id);
-        return Ok(new { CodigoAccesoQr = codigo, message = "QR regenerado" });
+        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(10), message = "QR regenerado" });
     }
 
     // ── Auto-vinculación (App Móvil) ──────────────────────────
@@ -295,6 +295,12 @@ public class CuidadoresController : ControllerBase
         {
             _logger.LogWarning("Self-registration failed - code not found");
             return NotFound(new { message = "Código de cuidador no encontrado" });
+        }
+
+        if (cuidador.CodigoExpira.HasValue && cuidador.CodigoExpira < DateTime.UtcNow)
+        {
+            _logger.LogWarning("Self-registration failed - code expired: {CuidadorId}", cuidador.Id);
+            return BadRequest(new { message = "El código ha expirado. Solicita uno nuevo al responsable." });
         }
 
         if (!string.IsNullOrEmpty(cuidador.UsuarioVinculadoId))

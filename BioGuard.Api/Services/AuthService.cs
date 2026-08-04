@@ -244,6 +244,11 @@ public class AuthService
         var paciente = await _db.FindFirstOrDefaultAsync(_db.Pacientes, p => p.CodigoAccesoQr == request.CodigoAcceso);
         if (paciente != null)
         {
+            if (paciente.CodigoExpira.HasValue && paciente.CodigoExpira < DateTime.UtcNow)
+            {
+                _logger.LogWarning("Patient login by code failed - code expired: {PacienteId}", paciente.Id);
+                return null;
+            }
             var token = GenerateToken(paciente.Id, paciente.CodigoAccesoQr, "paciente", pacienteId: paciente.Id);
             var refreshToken = await CreateAndStoreRefreshTokenAsync(paciente.Id, "paciente");
             _logger.LogInformation("Patient login by code: {PacienteId}", paciente.Id);
@@ -253,6 +258,11 @@ public class AuthService
         var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.CodigoAccesoQr == request.CodigoAcceso);
         if (cuidador != null)
         {
+            if (cuidador.CodigoExpira.HasValue && cuidador.CodigoExpira < DateTime.UtcNow)
+            {
+                _logger.LogWarning("Caregiver login by code failed - code expired: {CuidadorId}", cuidador.Id);
+                return null;
+            }
             var token = GenerateToken(cuidador.Id, cuidador.CodigoAccesoQr, "cuidador");
             var refreshToken = await CreateAndStoreRefreshTokenAsync(cuidador.Id, "cuidador");
             _logger.LogInformation("Caregiver login by code: {CuidadorId}", cuidador.Id);

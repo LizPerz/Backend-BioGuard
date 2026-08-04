@@ -16,6 +16,9 @@ public class Paciente
     [BsonElement("codigo_acceso_qr")]
     public string CodigoAccesoQr { get; set; } = string.Empty;
 
+    [BsonElement("codigo_expira")]
+    public DateTime? CodigoExpira { get; set; }
+
     [BsonElement("nombre")]
     public string Nombre { get; set; } = string.Empty;
 

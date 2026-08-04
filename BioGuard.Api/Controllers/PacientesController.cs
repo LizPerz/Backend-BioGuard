@@ -134,10 +134,11 @@ public class PacientesController : ControllerBase
 
         _logger.LogInformation("Creating paciente for user: {UserId}, name: {Nombre}", usuarioId, request.Nombre);
         var codigo = await _pacienteService.CrearPacienteAsync(usuarioId, request);
+        var pacienteCreado = await _pacienteService.GetByCodigoAsync(codigo);
         _logger.LogInformation("Paciente created successfully for user: {UserId}", usuarioId);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         await _auditoriaService.RegistrarAsync(usuarioId, "crear", "pacientes", codigo, ip);
-        return Ok(new { message = "Paciente creado", CodigoAccesoQr = codigo });
+        return Ok(new { PacienteId = pacienteCreado?.Id, message = "Paciente creado", CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(10) });
     }
 
     /// <summary>
@@ -257,7 +258,7 @@ public class PacientesController : ControllerBase
             _logger.LogWarning("Paciente not found for QR: {PacienteId}", id);
             return NotFound();
         }
-        return Ok(new { CodigoAccesoQr = paciente.CodigoAccesoQr });
+        return Ok(new { CodigoAccesoQr = paciente.CodigoAccesoQr, CodigoExpira = paciente.CodigoExpira });
     }
 
     /// <summary>
@@ -280,7 +281,7 @@ public class PacientesController : ControllerBase
         _logger.LogInformation("Regenerating QR for paciente: {PacienteId}", id);
         var codigo = await _pacienteService.RegenerarQRAsync(id);
         _logger.LogInformation("QR regenerated for paciente: {PacienteId}", id);
-        return Ok(new { CodigoAccesoQr = codigo, message = "QR regenerado" });
+        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(10), message = "QR regenerado" });
     }
 
     // ── Dispositivo ───────────────────────────────────────────
