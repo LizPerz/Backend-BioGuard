@@ -324,6 +324,41 @@ catch (Exception ex)
 }
 
 // =============================================
+// PLAN SEED (upsert idempotente al arranque)
+// =============================================
+try
+{
+    using var planScope = app.Services.CreateScope();
+    var planDb = planScope.ServiceProvider.GetRequiredService<IMongoDbContext>();
+    var planes = new[]
+    {
+        new Plan { Nombre = "Gratis", Precio = 0, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 2, DiasHistorial = 7, GpsContinuo = false, AiConsole = false, Activo = true, Orden = 1, Descripcion = "Plan gratuito con 2 cuidadores, reporte diario y 7 días de historial" },
+        new Plan { Nombre = "Familiar", Precio = 10, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 4, DiasHistorial = 15, GpsContinuo = true, AiConsole = false, Activo = true, Orden = 2, Descripcion = "Plan familiar con 4 cuidadores, GPS continuo, reporte diario y 15 días de historial" },
+        new Plan { Nombre = "Pro", Precio = 20, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 6, DiasHistorial = 30, GpsContinuo = true, AiConsole = true, Activo = true, Orden = 3, Descripcion = "Plan profesional con AI Console, GPS continuo, 6 cuidadores, reporte diario y 30 días de historial" }
+    };
+    foreach (var plan in planes)
+    {
+        var update = Builders<Plan>.Update
+            .Set(p => p.Precio, plan.Precio)
+            .Set(p => p.PrecioMoneda, plan.PrecioMoneda)
+            .Set(p => p.LimitePacientes, plan.LimitePacientes)
+            .Set(p => p.LimiteCuidadores, plan.LimiteCuidadores)
+            .Set(p => p.DiasHistorial, plan.DiasHistorial)
+            .Set(p => p.GpsContinuo, plan.GpsContinuo)
+            .Set(p => p.AiConsole, plan.AiConsole)
+            .Set(p => p.Activo, plan.Activo)
+            .Set(p => p.Orden, plan.Orden)
+            .Set(p => p.Descripcion, plan.Descripcion);
+        await planDb.Planes.UpdateOneAsync(p => p.Nombre == plan.Nombre, update, new UpdateOptions { IsUpsert = true });
+    }
+}
+catch (Exception ex)
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogWarning(ex, "Failed to upsert plans at startup");
+}
+
+// =============================================
 // MIDDLEWARE PIPELINE
 // =============================================
 if (app.Environment.IsDevelopment())
@@ -420,9 +455,9 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
 
         var planesDefinidos = new List<Plan>
         {
-            new() { Nombre = "Gratis", Precio = 0, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 2, DiasHistorial = 30, GpsContinuo = false, AiConsole = false, Activo = true, Orden = 1, Descripcion = "Plan gratuito con 2 cuidadores y 30 días de historial" },
-            new() { Nombre = "Familiar", Precio = 10, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 3, DiasHistorial = 15, GpsContinuo = true, AiConsole = false, Activo = true, Orden = 2, Descripcion = "Plan familiar con GPS continuo y hasta 3 cuidadores" },
-            new() { Nombre = "Pro", Precio = 20, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 6, DiasHistorial = 30, GpsContinuo = true, AiConsole = true, Activo = true, Orden = 3, Descripcion = "Plan profesional con AI Console, GPS continuo y hasta 6 cuidadores" }
+            new() { Nombre = "Gratis", Precio = 0, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 2, DiasHistorial = 7, GpsContinuo = false, AiConsole = false, Activo = true, Orden = 1, Descripcion = "Plan gratuito con 2 cuidadores, reporte diario y 7 días de historial" },
+            new() { Nombre = "Familiar", Precio = 10, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 4, DiasHistorial = 15, GpsContinuo = true, AiConsole = false, Activo = true, Orden = 2, Descripcion = "Plan familiar con 4 cuidadores, GPS continuo, reporte diario y 15 días de historial" },
+            new() { Nombre = "Pro", Precio = 20, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 6, DiasHistorial = 30, GpsContinuo = true, AiConsole = true, Activo = true, Orden = 3, Descripcion = "Plan profesional con AI Console, GPS continuo, 6 cuidadores, reporte diario y 30 días de historial" }
         };
 
         foreach (var plan in planesDefinidos)

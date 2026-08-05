@@ -286,8 +286,8 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
         var json = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(json);
         doc.RootElement.GetProperty("usados").GetInt64().Should().Be(2);
-        doc.RootElement.GetProperty("total").GetInt64().Should().Be(3);
-        doc.RootElement.GetProperty("disponibles").GetInt64().Should().Be(1);
+        doc.RootElement.GetProperty("total").GetInt64().Should().Be(2);
+        doc.RootElement.GetProperty("disponibles").GetInt64().Should().Be(0);
     }
 
     [Fact]
