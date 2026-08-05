@@ -20,6 +20,7 @@ public class AuthService
     private readonly int _expirationMinutes;
     private readonly int _refreshTokenDays;
     private readonly string? _googleClientId;
+    private readonly string _webAppUrl;
     private readonly HttpClient _httpClient;
     private readonly ILogger<AuthService> _logger;
     private readonly IEmailService _emailService;
@@ -39,6 +40,9 @@ public class AuthService
         _refreshTokenDays = int.Parse(config["Jwt:RefreshTokenDays"] ?? "7");
         _googleClientId = config["Google:ClientId"]
             ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
+        _webAppUrl = config["WebApp:Url"]
+            ?? Environment.GetEnvironmentVariable("WEB_APP_URL")
+            ?? "https://bioguard-web-6bgjx.ondigitalocean.app";
     }
 
     // ── Register ───────────────────────────────────────────
@@ -461,7 +465,7 @@ public class AuthService
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
         _logger.LogInformation("Password reset token generated for user: {UserId}", user.Id);
 
-        var resetLink = $"https://bioguard.app/reset-password?token={Uri.EscapeDataString(token)}";
+        var resetLink = $"{_webAppUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(token)}";
         await _emailService.SendPasswordResetAsync(user.Correo, $"{user.Nombre} {user.ApellidoPaterno}", resetLink);
 
         return true;

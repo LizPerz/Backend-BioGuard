@@ -28,6 +28,8 @@ services:
         value: http://+:8080
       - key: ML_API_URL
         value: http://bioguard-ml:8080
+      - key: WEB_APP_URL
+        value: https://bioguard-web-6bgjx.ondigitalocean.app
       - key: MONGODB_CONNECTION_STRING
         value: ${MONGODB_CONNECTION_STRING}
         type: SECRET
