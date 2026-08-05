@@ -46,6 +46,92 @@ def test_predict_returns_200_con_fallback():
     assert r.json()["modelo_version"] == "fallback"
 
 
+def test_fallback_senal_saludable_probabilidad_baja():
+    lecturas = [
+        {
+            "paciente_id": "p1",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pulso_bpm": 72,
+            "temperatura_c": 36.6,
+            "sudoracion_gsr": 2.0,
+            "probabilidad_pico": 0.9,
+        }
+    ]
+    r = client.post("/api/v1/predicciones", json={"paciente_id": "p1", "lecturas": lecturas})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["modelo_version"] == "fallback"
+    assert body["probabilidad_pico"] < 0.5
+    assert body["nivel_riesgo"] == "Normal"
+    assert body["contribuciones"]
+
+
+def test_fallback_senal_critica_probabilidad_alta():
+    lecturas = [
+        {
+            "paciente_id": "p1",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pulso_bpm": 170,
+            "temperatura_c": 41.0,
+            "sudoracion_gsr": 9.0,
+            "probabilidad_pico": 0.1,
+        }
+    ]
+    r = client.post("/api/v1/predicciones", json={"paciente_id": "p1", "lecturas": lecturas})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["probabilidad_pico"] >= 0.75
+    assert body["nivel_riesgo"] == "Critico"
+
+
+def test_fallback_reacciona_a_las_senales():
+    def predict(lectura):
+        return client.post(
+            "/api/v1/predicciones",
+            json={"paciente_id": "p1", "lecturas": [lectura]},
+        ).json()
+
+    sano = predict(
+        {
+            "paciente_id": "p1",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pulso_bpm": 72,
+            "temperatura_c": 36.6,
+            "sudoracion_gsr": 2.0,
+            "probabilidad_pico": 0.5,
+        }
+    )
+    critico = predict(
+        {
+            "paciente_id": "p1",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pulso_bpm": 165,
+            "temperatura_c": 40.5,
+            "sudoracion_gsr": 9.0,
+            "probabilidad_pico": 0.5,
+        }
+    )
+    assert sano["probabilidad_pico"] < critico["probabilidad_pico"]
+
+
+def test_fallback_contribuciones_entre_cero_y_uno():
+    lecturas = [
+        {
+            "paciente_id": "p1",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pulso_bpm": 150,
+            "temperatura_c": 39.0,
+            "sudoracion_gsr": 7.0,
+            "probabilidad_pico": 0.3,
+        }
+    ]
+    body = client.post("/api/v1/predicciones", json={"paciente_id": "p1", "lecturas": lecturas}).json()
+    for c in body["contribuciones"]:
+        assert 0.0 <= c["severidad"] <= 1.0
+        assert c["senal"]
+    assert body["explicacion"]
+
+
 def test_train_y_predict_ciclo_completo():
     import random
 
