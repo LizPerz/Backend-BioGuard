@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Config;
+using BioGuard.Api.Models;
 
 namespace BioGuard.Api.Controllers;
 
@@ -21,15 +22,17 @@ public class SensoresController : ControllerBase
     private readonly PacienteService _pacienteService;
     private readonly IMongoDbContext _db;
     private readonly AuditoriaService _auditoriaService;
+    private readonly MLPredictionClient _mlPredictionClient;
     private readonly ILogger<SensoresController> _logger;
     private readonly OwnershipHelper _ownershipHelper;
 
-    public SensoresController(SensorService sensorService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, ILogger<SensoresController> logger, OwnershipHelper ownershipHelper)
+    public SensoresController(SensorService sensorService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, MLPredictionClient mlPredictionClient, ILogger<SensoresController> logger, OwnershipHelper ownershipHelper)
     {
         _sensorService = sensorService;
         _pacienteService = pacienteService;
         _db = db;
         _auditoriaService = auditoriaService;
+        _mlPredictionClient = mlPredictionClient;
         _logger = logger;
         _ownershipHelper = ownershipHelper;
     }
@@ -39,6 +42,7 @@ public class SensoresController : ControllerBase
     /// <summary>
     /// POST /api/Sensores/lectura [MÓVIL]
     /// MÓDULO 5: Recibir lectura individual del WearOS (cada 10s)
+    /// Calcula el riesgo en ese instante vía el microservicio ML en lugar de guardar 0.0 fijo.
     /// </summary>
     [HttpPost("lectura")]
     public async Task<IActionResult> RecibirLectura([FromBody] LecturaSensorRequest request)
@@ -47,9 +51,10 @@ public class SensoresController : ControllerBase
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
         _logger.LogInformation("Receiving sensor reading for paciente: {PacienteId}", pacienteId);
+        var probabilidad = await CalcularRiesgoAsync(pacienteId, request.PulsoBpm, request.TemperaturaC, request.SudoracionGsr);
         var lectura = await _sensorService.InsertarLecturaAsync(
             pacienteId, "wearos-001", request.PulsoBpm, request.TemperaturaC,
-            request.SudoracionGsr, 0.0);
+            request.SudoracionGsr, probabilidad);
 
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -73,13 +78,66 @@ public class SensoresController : ControllerBase
         var count = 0;
         foreach (var lectura in request)
         {
+            var probabilidad = await CalcularRiesgoAsync(pacienteId, lectura.PulsoBpm, lectura.TemperaturaC, lectura.SudoracionGsr);
             await _sensorService.InsertarLecturaAsync(
                 pacienteId, "wearos-001", lectura.PulsoBpm, lectura.TemperaturaC,
-                lectura.SudoracionGsr, 0.0);
+                lectura.SudoracionGsr, probabilidad);
             count++;
         }
 
         return Ok(new { Procesadas = count, message = "Lote procesado" });
+    }
+
+    /// <summary>
+    /// Calcula el riesgo en el instante de la lectura llamando al microservicio ML.
+    /// Incluye el historial reciente para dar contexto al modelo (ventana deslizante).
+    /// Si ML no está configurado o no responde, la lectura se guarda con riesgo 0.0.
+    /// </summary>
+    private async Task<double> CalcularRiesgoAsync(string pacienteId, int pulsoBpm, double temperaturaC, double sudoracionGsr)
+    {
+        if (!_mlPredictionClient.IsConfigured)
+        {
+            _logger.LogWarning("ML service not configured; reading saved without risk for patient {PacienteId}", pacienteId);
+            return 0.0;
+        }
+
+        try
+        {
+            var historial = await _sensorService.ObtenerLecturasAsync(pacienteId, limite: 100) ?? new List<LecturaSensor>();
+            var lecturasParaMl = new List<LecturaSensor>(historial)
+            {
+                new()
+                {
+                    Meta = new MetaData { PacienteId = pacienteId },
+                    Timestamp = DateTime.UtcNow,
+                    PulsoBpm = pulsoBpm,
+                    TemperaturaC = temperaturaC,
+                    SudoracionGsr = sudoracionGsr
+                }
+            };
+
+            var prediccion = await _mlPredictionClient.PredecirAsync(pacienteId, lecturasParaMl);
+            if (prediccion == null)
+            {
+                _logger.LogWarning("ML service unavailable; reading saved without risk for patient {PacienteId}", pacienteId);
+                return 0.0;
+            }
+
+            var probabilidad = Math.Clamp(prediccion.ProbabilidadPico, 0.0, 1.0);
+            _logger.LogInformation("ML risk {Probabilidad:P0} ({NivelRiesgo}) for reading of patient {PacienteId}",
+                probabilidad, prediccion.NivelRiesgo, pacienteId);
+            return probabilidad;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "ML service not ready; reading saved without risk for patient {PacienteId}", pacienteId);
+            return 0.0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling ML service for patient {PacienteId}; reading saved without risk", pacienteId);
+            return 0.0;
+        }
     }
 
     // ── Lecturas (Consulta) ───────────────────────────────────

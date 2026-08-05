@@ -399,10 +399,12 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
     {
         var pacienteId = "123456789012345678901234";
 
+        LecturaSensor? insertada = null;
         _mockLecturas.Setup(c => c.InsertOneAsync(
             It.IsAny<LecturaSensor>(),
             It.IsAny<InsertOneOptions>(),
             It.IsAny<CancellationToken>()))
+            .Callback<LecturaSensor, InsertOneOptions?, CancellationToken>((lectura, _, _) => insertada = lectura)
             .Returns(Task.CompletedTask);
 
         _client.DefaultRequestHeaders.Authorization =
@@ -416,6 +418,9 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
         var json = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(json);
         doc.RootElement.GetProperty("message").GetString().Should().Be("Lectura recibida");
+
+        insertada.Should().NotBeNull();
+        insertada!.ProbabilidadPico.Should().Be(0.0);
     }
 
     [Fact]
