@@ -39,6 +39,12 @@ class PredictRequest(BaseModel):
     lecturas: list[Lectura] = []
 
 
+class Contribucion(BaseModel):
+    senal: str
+    valor: float
+    severidad: float
+
+
 class PredictResponse(BaseModel):
     paciente_id: str
     probabilidad_pico: float
@@ -48,3 +54,5 @@ class PredictResponse(BaseModel):
     modelo_version: str
     fecha_prediccion: datetime
     fecha_expiracion: datetime
+    contribuciones: list[Contribucion] | None = None
+    explicacion: str | None = None

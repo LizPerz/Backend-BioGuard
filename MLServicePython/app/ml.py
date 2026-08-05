@@ -9,6 +9,7 @@ históricas y los eventos metabólicos como JSON.
 """
 
 import math
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -150,18 +151,73 @@ def train(lecturas: list[Lectura], eventos: list, model_version: str) -> tuple[d
     return metrics, len(X_arr)
 
 
-def fallback_probability(rows: list[dict]) -> float:
+@dataclass(frozen=True)
+class RangoVital:
+    etiqueta: str
+    minimo_saludable: float
+    maximo_saludable: float
+    minimo_extremo: float
+    maximo_extremo: float
+    peso: float
+
+
+FALLBACK_PESO_PEOR_SENAL = 0.6
+
+FALLBACK_RANGES: dict[str, RangoVital] = {
+    "pulso_bpm": RangoVital("Pulso", 60.0, 100.0, 35.0, 170.0, 0.50),
+    "temperatura_c": RangoVital("Temperatura", 36.0, 37.5, 34.0, 42.0, 0.30),
+    "sudoracion_gsr": RangoVital("Sudoración (GSR)", 0.5, 4.0, 0.0, 12.0, 0.20),
+}
+
+
+def _severidad(valor: float, rango: RangoVital) -> float:
+    if valor < rango.minimo_saludable:
+        denom = rango.minimo_saludable - rango.minimo_extremo
+        if denom <= 0:
+            return 1.0
+        return max(0.0, min(1.0, (rango.minimo_saludable - valor) / denom))
+    if valor > rango.maximo_saludable:
+        denom = rango.maximo_extremo - rango.maximo_saludable
+        if denom <= 0:
+            return 1.0
+        return max(0.0, min(1.0, (valor - rango.maximo_saludable) / denom))
+    return 0.0
+
+
+def _fallback_scoring(rows: list[dict]) -> tuple[float, list[dict]]:
     if not rows:
-        return 0.5
-    probs = [r["probabilidad_pico"] for r in rows]
-    p = float(np.mean(probs))
-    if len(probs) >= 2:
-        trend = probs[-1] - probs[0]
-        if trend > 0.05:
-            p += 0.1
-        elif trend < -0.05:
-            p -= 0.1
-    return min(1.0, max(0.0, p))
+        return 0.5, []
+
+    ultima = rows[-1]
+    contribuciones: list[dict] = []
+    severidad_ponderada = 0.0
+    peso_total = 0.0
+    max_severidad = 0.0
+
+    for clave, rango in FALLBACK_RANGES.items():
+        valor = float(ultima[clave])
+        severidad = _severidad(valor, rango)
+        contribuciones.append(
+            {"senal": rango.etiqueta, "valor": round(valor, 4), "severidad": round(severidad, 4)}
+        )
+        severidad_ponderada += rango.peso * severidad
+        peso_total += rango.peso
+        max_severidad = max(max_severidad, severidad)
+
+    severidad_media = severidad_ponderada / peso_total
+    efectiva = (
+        FALLBACK_PESO_PEOR_SENAL * max_severidad
+        + (1.0 - FALLBACK_PESO_PEOR_SENAL) * severidad_media
+    )
+    logit = 6.0 * efectiva - 3.0
+    probabilidad = 1.0 / (1.0 + math.exp(-logit))
+    return round(probabilidad, 4), contribuciones
+
+
+def fallback_probability(rows: list[dict]) -> float:
+    """Probabilidad de fallback basada en rangos vitales (no usa probabilidad_pico)."""
+    prob, _ = _fallback_scoring(rows)
+    return prob
 
 
 def clasificar(prob: float) -> tuple[str, int | None, str]:
@@ -191,9 +247,12 @@ def predict(paciente_id: str, lecturas: list[Lectura]) -> PredictResponse:
         x = np.array([[feats[f] for f in FEATURES]], dtype=float)
         prob = float(clf.predict_proba(x)[0, 1])
         version = VERSION_PATH.read_text().strip() if VERSION_PATH.exists() else "desconocida"
+        contribuciones = None
+        explicacion = "Modelo entrenado: GradientBoosting sobre ventanas deslizantes (12 lecturas, horizonte 2 h)."
     else:
-        prob = fallback_probability(rows)
+        prob, contribuciones = _fallback_scoring(rows)
         version = "fallback"
+        explicacion = "Fallback baseline: severidad por rangos vitales (pulso, temperatura, sudoración) → probabilidad logística."
 
     nivel, horas, rec = clasificar(prob)
     return PredictResponse(
@@ -205,4 +264,6 @@ def predict(paciente_id: str, lecturas: list[Lectura]) -> PredictResponse:
         modelo_version=version,
         fecha_prediccion=now,
         fecha_expiracion=now + timedelta(hours=HORIZON_HOURS),
+        contribuciones=contribuciones,
+        explicacion=explicacion,
     )
