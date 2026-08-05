@@ -203,6 +203,7 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
             Id = "cuid123",
             Nombre = "Ana Garcia",
             CodigoAccesoQr = "CU-QR456",
+            CodigoExpira = DateTime.UtcNow.AddMinutes(5),
             UsuarioWebId = "user123"
         };
 
@@ -220,6 +221,42 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
         var json = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(json);
         doc.RootElement.GetProperty("codigoAccesoQr").GetString().Should().Be("CU-QR456");
+    }
+
+    [Fact]
+    public async Task ObtenerQR_CuidadorSinCodigo_GeneraNuevoCodigo()
+    {
+        var cuidador = new Cuidador
+        {
+            Id = "cuid123",
+            Nombre = "Ana Garcia",
+            CodigoAccesoQr = string.Empty,
+            UsuarioWebId = "user123"
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Cuidador>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+            .ReturnsAsync(cuidador);
+
+        var mockResult = new Mock<UpdateResult>();
+        mockResult.Setup(r => r.ModifiedCount).Returns(1);
+        _mockCuidadores.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<Cuidador>>(),
+                It.IsAny<UpdateDefinition<Cuidador>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResult.Object);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
+
+        var response = await _client.GetAsync("/api/Cuidadores/cuid123/qr");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("codigoAccesoQr").GetString().Should().MatchRegex("^[0-9]{8}$");
     }
 
     [Fact]

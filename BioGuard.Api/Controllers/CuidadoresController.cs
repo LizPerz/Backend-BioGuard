@@ -268,7 +268,8 @@ public class CuidadoresController : ControllerBase
         if (cuidador.UsuarioWebId != userId && User.FindFirst(ClaimTypes.Role)?.Value != "admin") return Forbid();
 
         _logger.LogInformation("Fetching QR for cuidador: {CuidadorId}", id);
-        return Ok(new { CodigoAccesoQr = cuidador.CodigoAccesoQr, CodigoExpira = cuidador.CodigoExpira });
+        var (codigo, expira) = await _cuidadorService.ObtenerOCrearCodigoAsync(id);
+        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = expira });
     }
 
     /// <summary>

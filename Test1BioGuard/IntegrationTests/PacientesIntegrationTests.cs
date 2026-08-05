@@ -208,6 +208,7 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
         {
             Id = pacienteId,
             CodigoAccesoQr = "XYZ98765",
+            CodigoExpira = DateTime.UtcNow.AddMinutes(5),
             Nombre = "Paciente QR",
             UsuarioWebId = "user123"
         };
@@ -226,6 +227,43 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
         var json = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(json);
         doc.RootElement.GetProperty("codigoAccesoQr").GetString().Should().Be("XYZ98765");
+    }
+
+    [Fact]
+    public async Task ObtenerQR_PacienteSinCodigo_GeneraNuevoCodigo()
+    {
+        var pacienteId = "123456789012345678901234";
+        var paciente = new Paciente
+        {
+            Id = pacienteId,
+            CodigoAccesoQr = string.Empty,
+            Nombre = "Paciente QR",
+            UsuarioWebId = "user123"
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Paciente>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+            .ReturnsAsync(paciente);
+
+        var mockResult = new Mock<UpdateResult>();
+        mockResult.Setup(r => r.ModifiedCount).Returns(1);
+        _mockPacientes.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<Paciente>>(),
+                It.IsAny<UpdateDefinition<Paciente>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResult.Object);
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
+
+        var response = await _client.GetAsync($"/api/Pacientes/{pacienteId}/qr");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("codigoAccesoQr").GetString().Should().MatchRegex("^[0-9]{8}$");
     }
 
     [Fact]

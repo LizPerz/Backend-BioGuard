@@ -268,13 +268,8 @@ public class PacientesController : ControllerBase
         }
 
         _logger.LogInformation("Fetching QR for paciente: {PacienteId}", id);
-        var paciente = await _pacienteService.GetByIdAsync(id);
-        if (paciente == null)
-        {
-            _logger.LogWarning("Paciente not found for QR: {PacienteId}", id);
-            return NotFound();
-        }
-        return Ok(new { CodigoAccesoQr = paciente.CodigoAccesoQr, CodigoExpira = paciente.CodigoExpira });
+        var (codigo, expira) = await _pacienteService.ObtenerOCrearCodigoAsync(id);
+        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = expira });
     }
 
     /// <summary>

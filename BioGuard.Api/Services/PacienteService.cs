@@ -129,6 +129,19 @@ public class PacienteService
         return result.DeletedCount > 0;
     }
 
+    public async Task<(string codigo, DateTime expira)> ObtenerOCrearCodigoAsync(string pacienteId)
+    {
+        var paciente = await GetByIdAsync(pacienteId);
+        if (paciente == null) return (string.Empty, DateTime.UtcNow);
+        var expirado = !paciente.CodigoExpira.HasValue || paciente.CodigoExpira.Value < DateTime.UtcNow;
+        if (string.IsNullOrWhiteSpace(paciente.CodigoAccesoQr) || expirado)
+        {
+            var codigo = await RegenerarQRAsync(pacienteId);
+            return (codigo, DateTime.UtcNow.AddMinutes(CodigoVigenciaMinutos));
+        }
+        return (paciente.CodigoAccesoQr, paciente.CodigoExpira!.Value);
+    }
+
     public async Task<string> RegenerarQRAsync(string pacienteId)
     {
         var codigo = GenerarCodigo();

@@ -108,6 +108,19 @@ public class CuidadorService
         return result.DeletedCount > 0;
     }
 
+    public async Task<(string codigo, DateTime expira)> ObtenerOCrearCodigoAsync(string id)
+    {
+        var cuidador = await ObtenerPorIdAsync(id);
+        if (cuidador == null) return (string.Empty, DateTime.UtcNow);
+        var expirado = !cuidador.CodigoExpira.HasValue || cuidador.CodigoExpira.Value < DateTime.UtcNow;
+        if (string.IsNullOrWhiteSpace(cuidador.CodigoAccesoQr) || expirado)
+        {
+            var codigo = await RegenerarQRAsync(id);
+            return (codigo, DateTime.UtcNow.AddMinutes(CodigoVigenciaMinutos));
+        }
+        return (cuidador.CodigoAccesoQr, cuidador.CodigoExpira!.Value);
+    }
+
     public async Task<string> RegenerarQRAsync(string id)
     {
         var codigo = GenerarCodigo();
