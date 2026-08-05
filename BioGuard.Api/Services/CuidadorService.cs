@@ -74,11 +74,13 @@ public class CuidadorService
         return (cuidador, codigo);
     }
 
-    public async Task<bool> ActualizarAsync(string id, string nombre, string parentesco)
+    public async Task<bool> ActualizarAsync(string id, string nombre, string parentesco, string telefono, string correo)
     {
         var update = Builders<Cuidador>.Update
             .Set(c => c.Nombre, nombre)
-            .Set(c => c.Parentesco, parentesco);
+            .Set(c => c.Parentesco, parentesco)
+            .Set(c => c.Telefono, telefono)
+            .Set(c => c.Correo, correo);
 
         var result = await _db.Cuidadores.UpdateOneAsync(c => c.Id == id, update);
         if (result.ModifiedCount == 0)
@@ -119,8 +121,9 @@ public class CuidadorService
 
     private static string GenerarCodigo()
     {
-        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        return "CU-" + new string(Enumerable.Repeat(chars, 8)
-            .Select(s => s[System.Security.Cryptography.RandomNumberGenerator.GetInt32(s.Length)]).ToArray());
+        var numeros = new char[8];
+        for (int i = 0; i < numeros.Length; i++)
+            numeros[i] = (char)System.Security.Cryptography.RandomNumberGenerator.GetInt32('0', '9' + 1);
+        return new string(numeros);
     }
 }

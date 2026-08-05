@@ -548,7 +548,8 @@ public class AuthServiceTests
         var request = new ForgotPasswordRequest("test@test.com");
         var result = await _service.ForgotPasswordAsync(request);
 
-        result.Should().BeTrue();
+        result.Success.Should().BeTrue();
+        result.RequestId.Should().NotBeNullOrEmpty();
     }
 
     [Fact]
@@ -562,7 +563,7 @@ public class AuthServiceTests
         var request = new ForgotPasswordRequest("noexist@test.com");
         var result = await _service.ForgotPasswordAsync(request);
 
-        result.Should().BeFalse();
+        result.Success.Should().BeFalse();
     }
 
     [Fact]

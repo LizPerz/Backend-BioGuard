@@ -39,8 +39,7 @@ public class CuidadorServiceTests
         cuidador.Should().NotBeNull();
         cuidador!.Nombre.Should().Be("María García");
         cuidador.Parentesco.Should().Be("Madre");
-        codigo.Should().StartWith("CU-");
-        codigo.Should().HaveLength(11);
+        codigo.Should().MatchRegex("^[0-9]{8}$");
     }
 
     [Fact]
@@ -110,8 +109,7 @@ public class CuidadorServiceTests
 
         var result = await _service.RegenerarQRAsync("123456789012345678901234");
 
-        result.Should().StartWith("CU-");
-        result.Should().HaveLength(11);
+        result.Should().MatchRegex("^[0-9]{8}$");
     }
 
     [Fact]

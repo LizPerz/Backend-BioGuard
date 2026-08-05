@@ -446,29 +446,55 @@ public class AuthService
 
     // ── Forgot Password ────────────────────────────────────
 
-    public async Task<bool> ForgotPasswordAsync(ForgotPasswordRequest request)
+    public async Task<ForgotPasswordResult> ForgotPasswordAsync(ForgotPasswordRequest request)
     {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Correo == NormalizeCorreo(request.Correo));
         if (user == null || !user.Activo)
         {
             _logger.LogWarning("Password reset attempt for inactive or non-existent user: {Email}", request.Correo);
-            return false;
+            return new ForgotPasswordResult(false, null, null);
         }
 
         var token = GenerateRandomToken();
+        var requestId = Guid.NewGuid().ToString("N");
         var expira = DateTime.UtcNow.AddHours(1);
 
         var update = Builders<UsuarioWeb>.Update
             .Set(u => u.ResetPasswordToken, token)
-            .Set(u => u.ResetPasswordExpira, expira);
+            .Set(u => u.ResetPasswordExpira, expira)
+            .Set(u => u.ResetPasswordRequestId, requestId)
+            .Set(u => u.ResetPasswordAbierto, false);
 
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
         _logger.LogInformation("Password reset token generated for user: {UserId}", user.Id);
 
-        var resetLink = $"{_webAppUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(token)}";
+        var resetLink = $"{_webAppUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(token)}&requestId={requestId}";
         await _emailService.SendPasswordResetAsync(user.Correo, $"{user.Nombre} {user.ApellidoPaterno}", resetLink);
 
+        return new ForgotPasswordResult(true, requestId, token);
+    }
+
+    public async Task<bool> MarcarResetAbiertoAsync(string requestId)
+    {
+        if (string.IsNullOrWhiteSpace(requestId)) return false;
+        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.ResetPasswordRequestId == requestId);
+        if (user == null)
+        {
+            _logger.LogWarning("Mark-open attempt for unknown reset request: {RequestId}", requestId);
+            return false;
+        }
+
+        var update = Builders<UsuarioWeb>.Update.Set(u => u.ResetPasswordAbierto, true);
+        await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
+        _logger.LogInformation("Reset link opened for user: {UserId}", user.Id);
         return true;
+    }
+
+    public async Task<bool> ResetAbiertoAsync(string requestId)
+    {
+        if (string.IsNullOrWhiteSpace(requestId)) return false;
+        var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.ResetPasswordRequestId == requestId);
+        return user != null && user.ResetPasswordAbierto;
     }
 
     public async Task<bool> ResetPasswordAsync(ResetPasswordRequest request)
@@ -496,7 +522,9 @@ public class AuthService
         var update = Builders<UsuarioWeb>.Update
             .Set(u => u.PasswordHash, PasswordHasher.Hash(request.NuevaPassword))
             .Set(u => u.ResetPasswordToken, null)
-            .Set(u => u.ResetPasswordExpira, null);
+            .Set(u => u.ResetPasswordExpira, null)
+            .Set(u => u.ResetPasswordRequestId, null)
+            .Set(u => u.ResetPasswordAbierto, true);
 
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
         _logger.LogInformation("Password reset successfully for user: {UserId}", user.Id);

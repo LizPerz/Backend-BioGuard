@@ -55,6 +55,12 @@ public class UsuarioWeb
     [BsonElement("reset_password_expira")]
     public DateTime? ResetPasswordExpira { get; set; }
 
+    [BsonElement("reset_password_request_id")]
+    public string? ResetPasswordRequestId { get; set; }
+
+    [BsonElement("reset_password_abierto")]
+    public bool ResetPasswordAbierto { get; set; } = false;
+
     [BsonElement("activo")]
     public bool Activo { get; set; } = true;
 

@@ -387,6 +387,99 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
+    public async Task MarcarResetAbierto_RequestValido_Retorna200()
+    {
+        var user = new UsuarioWeb
+        {
+            Id = "user123",
+            Correo = "test@test.com",
+            Activo = true,
+            ResetPasswordRequestId = "req-abc-123"
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(user);
+
+        var mockUpdateResult = new Mock<UpdateResult>();
+        mockUpdateResult.Setup(r => r.ModifiedCount).Returns(1);
+        _mockUsuarios.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<UsuarioWeb>>(),
+                It.IsAny<UpdateDefinition<UsuarioWeb>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockUpdateResult.Object);
+
+        var request = new MarcarResetAbiertoRequest("req-abc-123");
+        var response = await _client.PostAsJsonAsync("/api/Auth/reset-password/abrir", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task MarcarResetAbierto_RequestInvalido_Retorna400()
+    {
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync((UsuarioWeb?)null);
+
+        var request = new MarcarResetAbiertoRequest("no-existe");
+        var response = await _client.PostAsJsonAsync("/api/Auth/reset-password/abrir", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task ResetAbierto_LinkAbierto_RetornaTrue()
+    {
+        var user = new UsuarioWeb
+        {
+            Id = "user123",
+            Correo = "test@test.com",
+            ResetPasswordRequestId = "req-abc-123",
+            ResetPasswordAbierto = true
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(user);
+
+        var response = await _client.GetAsync("/api/Auth/reset-password/estado?requestId=req-abc-123");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("abierto").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ResetAbierto_LinkNoAbierto_RetornaFalse()
+    {
+        var user = new UsuarioWeb
+        {
+            Id = "user123",
+            Correo = "test@test.com",
+            ResetPasswordRequestId = "req-abc-123",
+            ResetPasswordAbierto = false
+        };
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(user);
+
+        var response = await _client.GetAsync("/api/Auth/reset-password/estado?requestId=req-abc-123");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("abierto").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
     public async Task CambiarPassword_DatosValidos_Retorna200()
     {
         var user = new UsuarioWeb
