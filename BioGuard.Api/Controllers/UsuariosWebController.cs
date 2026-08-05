@@ -52,6 +52,7 @@ public class UsuariosWebController : ControllerBase
             usuario.ApellidoPaterno,
             usuario.ApellidoMaterno,
             usuario.Correo,
+            usuario.FotoPerfil,
             usuario.FechaRegistro,
             Plan = (await _usuariosWebService.GetPlanAsync(usuarioId))?.Nombre ?? "Sin plan"
         });
