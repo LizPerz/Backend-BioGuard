@@ -26,7 +26,15 @@ public class UsuariosWebService
     {
         var user = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Id == usuarioId);
         if (user == null) return null;
-        return await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
+
+        var plan = string.IsNullOrEmpty(user.PlanId)
+            ? null
+            : await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId);
+        if (plan != null) return plan;
+
+        // Fallback: si el usuario no tiene plan asignado o el plan ya no existe,
+        // devuelve el plan Gratis para que el límite de cuidadores aplique igual.
+        return await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Nombre == "Gratis");
     }
 
     public async Task<bool> UpdatePerfilAsync(string usuarioId, UpdatePerfilRequest request)

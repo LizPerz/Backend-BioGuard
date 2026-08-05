@@ -175,9 +175,13 @@ public class CuidadoresController : ControllerBase
     private async Task<int> ObtenerLimiteCuidadoresAsync(string usuarioId)
     {
         var usuario = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Id == usuarioId);
-        if (usuario == null) return 3;
+        if (usuario == null) return 2;
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == usuario.PlanId);
-        return plan?.LimiteCuidadores > 0 ? plan.LimiteCuidadores : 3;
+        if (plan != null && plan.LimiteCuidadores > 0) return plan.LimiteCuidadores;
+
+        // Fallback al plan Gratis (2 cuidadores) si el plan del usuario no existe.
+        var gratis = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Nombre == "Gratis");
+        return gratis != null && gratis.LimiteCuidadores > 0 ? gratis.LimiteCuidadores : 2;
     }
 
     /// <summary>
