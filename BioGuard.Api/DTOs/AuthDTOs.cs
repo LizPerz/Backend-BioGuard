@@ -160,6 +160,9 @@ public record CrearSesionPagoRequest(
     [Required] string PlanNombre,
     string? MetodoPago = null);
 
+public record SimularPagoRequest(
+    [Required] string PlanNombre);
+
 public record PagoResponse(
     string Id, decimal Monto, string Moneda, string Estado,
     DateTime FechaPago, string MetodoPago);

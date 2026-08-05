@@ -47,6 +47,30 @@ public class PagosController : ControllerBase
         });
     }
 
+    [HttpPost("simular-pago")]
+    public async Task<IActionResult> SimularPago([FromBody] SimularPagoRequest request)
+    {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        _logger.LogInformation("Simulating payment for user {UsuarioId}, plan {PlanNombre}", usuarioId, request.PlanNombre);
+        var pago = await _pagosService.SimularPagoAsync(usuarioId, request.PlanNombre);
+        if (pago == null)
+        {
+            _logger.LogWarning("Simulated payment failed: invalid plan {PlanNombre}", request.PlanNombre);
+            return BadRequest(new { message = "Plan no válido" });
+        }
+
+        return Ok(new
+        {
+            PagoId = pago.Id,
+            pago.Monto,
+            pago.Moneda,
+            pago.Estado,
+            message = "Pago simulado completado y plan activado"
+        });
+    }
+
     [HttpGet("historial")]
     public async Task<IActionResult> Historial()
     {

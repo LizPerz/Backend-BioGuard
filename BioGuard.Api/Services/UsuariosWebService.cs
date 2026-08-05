@@ -71,6 +71,14 @@ public class UsuariosWebService
         return result.ModifiedCount > 0;
     }
 
+    public async Task<bool> EliminarFotoAsync(string usuarioId)
+    {
+        var update = Builders<UsuarioWeb>.Update.Set(u => u.FotoPerfil, null);
+        var result = await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == usuarioId, update);
+        _logger.LogInformation("Profile photo removed for user: {UsuarioId}", usuarioId);
+        return result.ModifiedCount > 0;
+    }
+
     public virtual async Task<bool> CambiarPlanAsync(string usuarioId, string planNombre)
     {
         var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Nombre == planNombre);

@@ -7,6 +7,8 @@ namespace BioGuard.Api.Services;
 
 public class CuidadorService
 {
+    public const int CodigoVigenciaMinutos = 5;
+
     private readonly IMongoDbContext _db;
     private readonly ILogger<CuidadorService> _logger;
 
@@ -59,7 +61,7 @@ public class CuidadorService
             UsuarioWebId = usuarioId,
             PacienteId = pacienteId,
             CodigoAccesoQr = codigo,
-            CodigoExpira = DateTime.UtcNow.AddMinutes(10),
+            CodigoExpira = DateTime.UtcNow.AddMinutes(CodigoVigenciaMinutos),
             Nombre = nombre,
             Parentesco = parentesco,
             Telefono = telefono,
@@ -109,7 +111,7 @@ public class CuidadorService
         var codigo = GenerarCodigo();
         var update = Builders<Cuidador>.Update
             .Set(c => c.CodigoAccesoQr, codigo)
-            .Set(c => c.CodigoExpira, DateTime.UtcNow.AddMinutes(10));
+            .Set(c => c.CodigoExpira, DateTime.UtcNow.AddMinutes(CodigoVigenciaMinutos));
         await _db.Cuidadores.UpdateOneAsync(c => c.Id == id, update);
         _logger.LogInformation("QR regenerated for caregiver: {CuidadorId}", id);
         return codigo;
