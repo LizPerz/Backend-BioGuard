@@ -167,13 +167,40 @@ public class AuthController : ControllerBase
     {
         _logger.LogInformation("Forgot password attempt for email: {Correo}", request.Correo);
         var result = await _authService.ForgotPasswordAsync(request);
-        if (!result)
+        if (!result.Success)
         {
             _logger.LogWarning("Forgot password failed for email: {Correo} - email not found", request.Correo);
             return BadRequest(new { message = "Correo no encontrado" });
         }
         _logger.LogInformation("Password recovery email sent for email: {Correo}", request.Correo);
-        return Ok(new { message = "Se envió un link de recuperación a tu correo" });
+        return Ok(new { message = "Se envió un link de recuperación a tu correo", requestId = result.RequestId, token = result.Token });
+    }
+
+    // POST /api/Auth/reset-password/abrir [WEB]
+    // Marca como abierto el link de recuperación desde el dispositivo que lo recibe
+    // (el dispositivo que solicitó el reset hace polling a /estado)
+
+    [HttpPost("reset-password/abrir")]
+    [AllowAnonymous]
+    public async Task<IActionResult> MarcarResetAbierto([FromBody] MarcarResetAbiertoRequest request)
+    {
+        var result = await _authService.MarcarResetAbiertoAsync(request.RequestId);
+        if (!result)
+        {
+            return BadRequest(new { message = "Solicitud de recuperación no encontrada" });
+        }
+        return Ok(new { message = "Link abierto" });
+    }
+
+    // GET /api/Auth/reset-password/estado?requestId=... [WEB]
+    // El dispositivo que solicitó el reset consulta si el link ya fue abierto
+
+    [HttpGet("reset-password/estado")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetAbierto([FromQuery] string requestId)
+    {
+        var abierto = await _authService.ResetAbiertoAsync(requestId);
+        return Ok(new { abierto });
     }
 
     // POST /api/Auth/reset-password [WEB]

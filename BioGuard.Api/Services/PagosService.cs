@@ -255,8 +255,8 @@ public class PagosService
             PlanId = plan.Id,
             Estado = "completado",
             FechaPago = DateTime.UtcNow,
-            MetodoPago = "simulado",
-            Gateway = "ninguno"
+            MetodoPago = "tarjeta",
+            Gateway = "propio"
         };
         await _db.Pagos.InsertOneAsync(pago);
 

@@ -50,7 +50,7 @@ public class CuidadoresController : ControllerBase
         _logger.LogInformation("Listing cuidadores for user: {UserId}", usuarioId);
         var cuidadores = await _cuidadorService.ObtenerPorUsuarioAsync(usuarioId);
         var response = cuidadores.Select(c => new CuidadorResponse(
-            c.Id, c.Nombre, c.Parentesco, c.PacienteId)).ToList();
+            c.Id, c.Nombre, c.Parentesco, c.PacienteId, c.Telefono, c.Correo)).ToList();
         return Ok(response);
     }
 
@@ -74,7 +74,8 @@ public class CuidadoresController : ControllerBase
         }
 
         var count = await _cuidadorService.ContarPorPacienteAsync(paciente.Id);
-        return Ok(new { Usados = count, Total = 3, Disponibles = 3 - count });
+        var limite = await ObtenerLimiteCuidadoresAsync(usuarioId);
+        return Ok(new { Usados = count, Total = limite, Disponibles = Math.Max(0, limite - count) });
     }
 
     /// <summary>
@@ -102,7 +103,7 @@ public class CuidadoresController : ControllerBase
 
         return Ok(new CuidadorResponse(
             cuidador.Id, cuidador.Nombre, cuidador.Parentesco,
-            cuidador.PacienteId));
+            cuidador.PacienteId, cuidador.Telefono, cuidador.Correo));
     }
 
     /// <summary>
@@ -125,7 +126,7 @@ public class CuidadoresController : ControllerBase
         _logger.LogInformation("Fetching cuidadores for paciente: {PacienteId}", pacienteId);
         var cuidadores = await _cuidadorService.ObtenerPorPacienteAsync(pacienteId);
         var response = cuidadores.Select(c => new CuidadorResponse(
-            c.Id, c.Nombre, c.Parentesco, c.PacienteId)).ToList();
+            c.Id, c.Nombre, c.Parentesco, c.PacienteId, c.Telefono, c.Correo)).ToList();
         return Ok(response);
     }
 
@@ -203,7 +204,7 @@ public class CuidadoresController : ControllerBase
             return Forbid();
         }
 
-        var result = await _cuidadorService.ActualizarAsync(id, request.Nombre, request.Parentesco);
+        var result = await _cuidadorService.ActualizarAsync(id, request.Nombre, request.Parentesco, request.Telefono, request.Correo);
         if (!result)
         {
             _logger.LogWarning("Cuidador update failed: {CuidadorId}", id);

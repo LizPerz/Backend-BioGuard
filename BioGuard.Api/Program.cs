@@ -418,18 +418,30 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
     {
         var now = DateTime.UtcNow;
 
-        var existingPlan = await db.FindFirstOrDefaultAsync(db.Planes, p => p.Nombre == "Gratis");
-        if (existingPlan == null)
+        var planesDefinidos = new List<Plan>
         {
-            var planes = new List<Plan>
-            {
-                new() { Nombre = "Gratis", Precio = 0, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 1, DiasHistorial = 7, GpsContinuo = false, AiConsole = false, Activo = true, Orden = 1, Descripcion = "Plan gratuito con 1 cuidador, 7 días de historial" },
-                new() { Nombre = "Familiar", Precio = 1, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 3, DiasHistorial = 30, GpsContinuo = true, AiConsole = false, Activo = true, Orden = 2, Descripcion = "Plan familiar con GPS y hasta 3 cuidadores" },
-                new() { Nombre = "Pro", Precio = 2, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 6, DiasHistorial = 90, GpsContinuo = true, AiConsole = true, Activo = true, Orden = 3, Descripcion = "Plan profesional con AI Console, GPS continuo y hasta 6 cuidadores" }
-            };
-            await SafeInsertMany(db.Planes, planes, "planes");
-            existingPlan = await db.FindFirstOrDefaultAsync(db.Planes, p => p.Nombre == "Gratis");
+            new() { Nombre = "Gratis", Precio = 0, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 2, DiasHistorial = 30, GpsContinuo = false, AiConsole = false, Activo = true, Orden = 1, Descripcion = "Plan gratuito con 2 cuidadores y 30 días de historial" },
+            new() { Nombre = "Familiar", Precio = 10, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 3, DiasHistorial = 15, GpsContinuo = true, AiConsole = false, Activo = true, Orden = 2, Descripcion = "Plan familiar con GPS continuo y hasta 3 cuidadores" },
+            new() { Nombre = "Pro", Precio = 20, PrecioMoneda = "MXN", LimitePacientes = 1, LimiteCuidadores = 6, DiasHistorial = 30, GpsContinuo = true, AiConsole = true, Activo = true, Orden = 3, Descripcion = "Plan profesional con AI Console, GPS continuo y hasta 6 cuidadores" }
+        };
+
+        foreach (var plan in planesDefinidos)
+        {
+            var update = Builders<Plan>.Update
+                .Set(p => p.Precio, plan.Precio)
+                .Set(p => p.PrecioMoneda, plan.PrecioMoneda)
+                .Set(p => p.LimitePacientes, plan.LimitePacientes)
+                .Set(p => p.LimiteCuidadores, plan.LimiteCuidadores)
+                .Set(p => p.DiasHistorial, plan.DiasHistorial)
+                .Set(p => p.GpsContinuo, plan.GpsContinuo)
+                .Set(p => p.AiConsole, plan.AiConsole)
+                .Set(p => p.Activo, plan.Activo)
+                .Set(p => p.Orden, plan.Orden)
+                .Set(p => p.Descripcion, plan.Descripcion);
+            await db.Planes.UpdateOneAsync(p => p.Nombre == plan.Nombre, update, new UpdateOptions { IsUpsert = true });
         }
+
+        var existingPlan = await db.FindFirstOrDefaultAsync(db.Planes, p => p.Nombre == "Gratis");
 
         var rnd = new Random(Guid.NewGuid().GetHashCode());
         var macAddr = $"AA:BB:CC:{rnd.Next(0x10,0xFF):X2}:{rnd.Next(0x10,0xFF):X2}:{rnd.Next(0x10,0xFF):X2}";

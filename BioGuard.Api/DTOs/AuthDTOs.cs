@@ -47,6 +47,11 @@ public record ResetPasswordRequest(
     [Required] string Token,
     [Required] [MinLength(8)] [StringLength(128)] string NuevaPassword);
 
+public record MarcarResetAbiertoRequest(
+    [Required] string RequestId);
+
+public record ForgotPasswordResult(bool Success, string? RequestId, string? Token);
+
 public record CambiarPasswordRequest(
     [Required] string PasswordActual,
     [Required] [MinLength(8)] [StringLength(128)] string NuevaPassword);
@@ -91,18 +96,20 @@ public record UpdateNombreRequest(
 
 public record CuidadorResponse(
     string Id, string Nombre, string Parentesco,
-    string PacienteId);
+    string PacienteId, string Telefono = "", string Correo = "");
 
 public record CrearCuidadorRequest(
     [Required] string PacienteId,
     [Required] [StringLength(200)] string Nombre,
     [Required] [StringLength(100)] string Parentesco,
-    [Required] [Phone] string Telefono,
+    [Required] [RegularExpression("^[0-9]{10}$", ErrorMessage = "El teléfono debe contener exactamente 10 dígitos numéricos")] string Telefono,
     [Required] [EmailAddress] string Correo);
 
 public record ActualizarCuidadorRequest(
     [Required] [StringLength(200)] string Nombre,
-    [Required] [StringLength(100)] string Parentesco);
+    [Required] [StringLength(100)] string Parentesco,
+    [Required] [RegularExpression("^[0-9]{10}$", ErrorMessage = "El teléfono debe contener exactamente 10 dígitos numéricos")] string Telefono,
+    [Required] [EmailAddress] string Correo);
 
 public record VincularCuidadorRequest(
     [Required] [StringLength(50)] string CodigoAcceso,

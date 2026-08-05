@@ -142,8 +142,9 @@ public class PacienteService
 
     private static string GenerarCodigo()
     {
-        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        return new string(Enumerable.Repeat(chars, 8)
-            .Select(s => s[System.Security.Cryptography.RandomNumberGenerator.GetInt32(s.Length)]).ToArray());
+        var numeros = new char[8];
+        for (int i = 0; i < numeros.Length; i++)
+            numeros[i] = (char)System.Security.Cryptography.RandomNumberGenerator.GetInt32('0', '9' + 1);
+        return new string(numeros);
     }
 }

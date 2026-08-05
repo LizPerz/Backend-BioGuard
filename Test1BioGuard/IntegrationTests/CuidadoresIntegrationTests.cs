@@ -125,7 +125,7 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(json);
-        doc.RootElement.GetProperty("codigoAccesoQr").GetString().Should().StartWith("CU-");
+        doc.RootElement.GetProperty("codigoAccesoQr").GetString().Should().MatchRegex("^[0-9]{8}$");
     }
 
     [Fact]
@@ -340,7 +340,7 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
 
-        var request = new ActualizarCuidadorRequest("Maria Garcia", "Tia");
+        var request = new ActualizarCuidadorRequest("Maria Garcia", "Tia", "5559876543", "maria@test.com");
         var response = await _client.PutAsJsonAsync("/api/Cuidadores/cuid123", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -365,7 +365,7 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
         _client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestTokenHelper.GenerateDuenoToken());
 
-        var request = new ActualizarCuidadorRequest("No Existe", "Desconocido");
+        var request = new ActualizarCuidadorRequest("No Existe", "Desconocido", "5550001111", "no@test.com");
         var response = await _client.PutAsJsonAsync("/api/Cuidadores/nonexistent", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -405,7 +405,7 @@ public class CuidadoresIntegrationTests : IClassFixture<CustomWebApplicationFact
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(json);
-        doc.RootElement.GetProperty("codigoAccesoQr").GetString().Should().StartWith("CU-");
+        doc.RootElement.GetProperty("codigoAccesoQr").GetString().Should().MatchRegex("^[0-9]{8}$");
         doc.RootElement.GetProperty("message").GetString().Should().Be("QR regenerado");
     }
 
