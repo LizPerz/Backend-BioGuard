@@ -149,10 +149,11 @@ public class CuidadoresController : ControllerBase
         }
 
         var count = await _cuidadorService.ContarPorPacienteAsync(request.PacienteId);
-        if (count >= 3)
+        var limiteCuidadores = await ObtenerLimiteCuidadoresAsync(usuarioId);
+        if (count >= limiteCuidadores)
         {
             _logger.LogWarning("Cuidador limit reached for paciente: {PacienteId}, user: {UserId}", request.PacienteId, usuarioId);
-            return BadRequest(new { message = "Límite de cuidadores alcanzado" });
+            return BadRequest(new { message = "Límite de cuidadores alcanzado para tu plan" });
         }
 
         if (await _cuidadorService.ExisteCorreoPorPacienteAsync(request.PacienteId, request.Correo))
@@ -167,7 +168,15 @@ public class CuidadoresController : ControllerBase
             request.Telefono, request.Correo);
 
         _logger.LogInformation("Cuidador created successfully for user: {UserId}", usuarioId);
-        return Ok(new { CuidadorId = cuidador?.Id ?? "", CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(10), message = "Cuidador creado" });
+        return Ok(new { CuidadorId = cuidador?.Id ?? "", CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(CuidadorService.CodigoVigenciaMinutos), message = "Cuidador creado" });
+    }
+
+    private async Task<int> ObtenerLimiteCuidadoresAsync(string usuarioId)
+    {
+        var usuario = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Id == usuarioId);
+        if (usuario == null) return 3;
+        var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == usuario.PlanId);
+        return plan?.LimiteCuidadores > 0 ? plan.LimiteCuidadores : 3;
     }
 
     /// <summary>
@@ -274,7 +283,7 @@ public class CuidadoresController : ControllerBase
 
         var codigo = await _cuidadorService.RegenerarQRAsync(id);
         _logger.LogInformation("QR regenerated for cuidador: {CuidadorId}", id);
-        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(10), message = "QR regenerado" });
+        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(CuidadorService.CodigoVigenciaMinutos), message = "QR regenerado" });
     }
 
     // ── Auto-vinculación (App Móvil) ──────────────────────────

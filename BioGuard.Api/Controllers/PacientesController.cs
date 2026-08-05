@@ -132,13 +132,29 @@ public class PacientesController : ControllerBase
             return BadRequest(new { message = "La fecha de nacimiento no puede ser futura" });
         }
 
+        var limitePacientes = await ObtenerLimitePacientesAsync(usuarioId);
+        var pacientesExistentes = await _pacienteService.GetAllByUsuarioAsync(usuarioId);
+        if (pacientesExistentes.Count >= limitePacientes)
+        {
+            _logger.LogWarning("Paciente limit reached for user: {UserId}", usuarioId);
+            return BadRequest(new { message = "Límite de pacientes alcanzado para tu plan" });
+        }
+
         _logger.LogInformation("Creating paciente for user: {UserId}, name: {Nombre}", usuarioId, request.Nombre);
         var codigo = await _pacienteService.CrearPacienteAsync(usuarioId, request);
         var pacienteCreado = await _pacienteService.GetByCodigoAsync(codigo);
         _logger.LogInformation("Paciente created successfully for user: {UserId}", usuarioId);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         await _auditoriaService.RegistrarAsync(usuarioId, "crear", "pacientes", codigo, ip);
-        return Ok(new { PacienteId = pacienteCreado?.Id, message = "Paciente creado", CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(10) });
+        return Ok(new { PacienteId = pacienteCreado?.Id, message = "Paciente creado", CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(PacienteService.CodigoVigenciaMinutos) });
+    }
+
+    private async Task<int> ObtenerLimitePacientesAsync(string usuarioId)
+    {
+        var usuario = await _db.FindFirstOrDefaultAsync(_db.UsuariosWeb, u => u.Id == usuarioId);
+        if (usuario == null) return 1;
+        var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == usuario.PlanId);
+        return plan?.LimitePacientes > 0 ? plan.LimitePacientes : 1;
     }
 
     /// <summary>
@@ -281,7 +297,7 @@ public class PacientesController : ControllerBase
         _logger.LogInformation("Regenerating QR for paciente: {PacienteId}", id);
         var codigo = await _pacienteService.RegenerarQRAsync(id);
         _logger.LogInformation("QR regenerated for paciente: {PacienteId}", id);
-        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(10), message = "QR regenerado" });
+        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(PacienteService.CodigoVigenciaMinutos), message = "QR regenerado" });
     }
 
     // ── Dispositivo ───────────────────────────────────────────

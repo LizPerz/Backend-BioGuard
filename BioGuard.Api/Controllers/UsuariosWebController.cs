@@ -119,6 +119,26 @@ public class UsuariosWebController : ControllerBase
         return Ok(new { message = "Foto actualizada" });
     }
 
+    /// <summary>
+    /// DELETE /api/UsuariosWeb/mi-perfil/foto [WEB]
+    /// MÓDULO 2: Eliminar foto de perfil
+    /// </summary>
+    [HttpDelete("mi-perfil/foto")]
+    public async Task<IActionResult> EliminarFoto()
+    {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        _logger.LogInformation("Deleting photo for user {UsuarioId}", usuarioId);
+        var result = await _usuariosWebService.EliminarFotoAsync(usuarioId);
+        if (!result)
+        {
+            _logger.LogWarning("Photo delete failed for user {UsuarioId}", usuarioId);
+            return NotFound();
+        }
+        return Ok(new { message = "Foto eliminada" });
+    }
+
     // ── Plan / Suscripción ────────────────────────────────────
 
     /// <summary>

@@ -61,6 +61,16 @@ public class PacientesIntegrationTests : IClassFixture<CustomWebApplicationFacto
                     Nombre = "Paciente Test"
                 }
             });
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<UsuarioWeb>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<UsuarioWeb, bool>>>()))
+            .ReturnsAsync(new UsuarioWeb { Id = "user123", PlanId = "plan123" });
+
+        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
+                It.IsAny<IMongoCollection<Plan>>(),
+                It.IsAny<System.Linq.Expressions.Expression<Func<Plan, bool>>>()))
+            .ReturnsAsync(new Plan { Id = "plan123", Nombre = "Familiar", LimitePacientes = 3, LimiteCuidadores = 3, DiasHistorial = 30 });
     }
 
     [Fact]

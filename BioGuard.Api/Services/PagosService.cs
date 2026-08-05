@@ -238,6 +238,37 @@ public class PagosService
         return true;
     }
 
+    public async Task<Pago?> SimularPagoAsync(string usuarioId, string planNombre)
+    {
+        var plan = await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Nombre == planNombre);
+        if (plan == null)
+        {
+            _logger.LogWarning("Pago simulado: plan no encontrado: {PlanNombre}", planNombre);
+            return null;
+        }
+
+        var pago = new Pago
+        {
+            UsuarioWebId = usuarioId,
+            Monto = plan.Precio,
+            Moneda = plan.PrecioMoneda,
+            PlanId = plan.Id,
+            Estado = "completado",
+            FechaPago = DateTime.UtcNow,
+            MetodoPago = "simulado",
+            Gateway = "ninguno"
+        };
+        await _db.Pagos.InsertOneAsync(pago);
+
+        var ok = await _usuariosWebService.CambiarPlanAsync(usuarioId, planNombre);
+        if (!ok)
+        {
+            _logger.LogWarning("Pago simulado: no se pudo activar el plan {PlanNombre} para {UsuarioId}", planNombre, usuarioId);
+        }
+        _logger.LogInformation("Pago simulado completado para {UsuarioId}, plan {PlanNombre}", usuarioId, planNombre);
+        return pago;
+    }
+
     public async Task<List<Pago>> ObtenerHistorialAsync(string usuarioId)
     {
         _logger.LogInformation("Obteniendo historial de pagos para usuario {UsuarioId}", usuarioId);
