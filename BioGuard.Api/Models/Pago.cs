@@ -24,6 +24,7 @@ public class Pago
     public string PlanId { get; set; } = string.Empty;
 
     [BsonElement("stripe_session_id")]
+    [BsonIgnoreIfNull]
     public string? StripeSessionId { get; set; }
 
     [BsonElement("checkout_url")]
