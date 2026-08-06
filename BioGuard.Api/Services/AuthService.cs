@@ -113,9 +113,7 @@ public class AuthService
         var sent = await _emailService.SendVerificationCodeAsync(user.Correo, $"{user.Nombre} {user.ApellidoPaterno}", verificationCode);
         if (!sent)
         {
-            _logger.LogWarning("Registration verification email failed for user {UserId}, deleting pending account", user.Id);
-            await _db.UsuariosWeb.DeleteOneAsync(u => u.Id == user.Id);
-            return new RegisterResult(null, "No se pudo enviar el código de verificación al correo. Verifica tu dirección o intenta más tarde.");
+            _logger.LogWarning("Registration verification email could not be sent for user {UserId}; account left pending, user can resend from the verify screen", user.Id);
         }
 
         _logger.LogInformation("User registered (pending verification): {UserId}", user.Id);
