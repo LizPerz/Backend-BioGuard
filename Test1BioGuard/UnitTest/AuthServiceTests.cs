@@ -283,8 +283,10 @@ public class AuthServiceTests
         var result = await _service.LoginWebAsync(request);
 
         result.Should().NotBeNull();
-        result.Error.Should().Contain("verificado");
-        result.Response.Should().BeNull();
+        result.Error.Should().BeNull();
+        result.Response.Should().NotBeNull();
+        result.Response!.RequiresVerification.Should().BeTrue();
+        result.Response.UserId.Should().Be("user123");
     }
 
     [Fact]

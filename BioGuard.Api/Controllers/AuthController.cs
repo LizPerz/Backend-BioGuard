@@ -66,6 +66,11 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = result.Error });
         }
         var loginResult = result.Response!;
+        if (loginResult.RequiresVerification)
+        {
+            _logger.LogWarning("Web login for unverified user: {Email}", request.Correo);
+            return Ok(new { message = "Tu correo aún no ha sido verificado. Revisa tu bandeja de entrada y confirma el código de verificación.", requiresVerification = true, userId = loginResult.UserId, correo = request.Correo });
+        }
         _logger.LogInformation("Web login successful for email: {Correo}", request.Correo);
         var loginIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         await _auditoriaService.RegistrarAsync(loginResult.UserId, "login", "usuarios_web", loginResult.UserId, loginIp);

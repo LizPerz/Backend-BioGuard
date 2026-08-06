@@ -110,7 +110,13 @@ public class AuthService
 
         await _db.UsuariosWeb.InsertOneAsync(user);
 
-        await _emailService.SendVerificationCodeAsync(user.Correo, $"{user.Nombre} {user.ApellidoPaterno}", verificationCode);
+        var sent = await _emailService.SendVerificationCodeAsync(user.Correo, $"{user.Nombre} {user.ApellidoPaterno}", verificationCode);
+        if (!sent)
+        {
+            _logger.LogWarning("Registration verification email failed for user {UserId}, deleting pending account", user.Id);
+            await _db.UsuariosWeb.DeleteOneAsync(u => u.Id == user.Id);
+            return new RegisterResult(null, "No se pudo enviar el código de verificación al correo. Verifica tu dirección o intenta más tarde.");
+        }
 
         _logger.LogInformation("User registered (pending verification): {UserId}", user.Id);
 
@@ -131,7 +137,8 @@ public class AuthService
         if (!user.Activo)
         {
             _logger.LogWarning("Login attempt for unverified user: {Email}", request.Correo);
-            return new LoginResult(null, "Tu correo aún no ha sido verificado. Revisa tu bandeja de entrada y confirma el código de verificación.");
+            var unverifiedPlan = (await _db.FindFirstOrDefaultAsync(_db.Planes, p => p.Id == user.PlanId))?.Nombre ?? "Sin plan";
+            return new LoginResult(new AuthResponse("", user.Id, $"{user.Nombre} {user.ApellidoPaterno}", RolWebUsuario(user), unverifiedPlan, RequiresVerification: true), null);
         }
 
         if (user.LockedUntil != null && user.LockedUntil > DateTime.UtcNow)
