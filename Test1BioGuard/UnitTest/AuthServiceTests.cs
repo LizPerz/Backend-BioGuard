@@ -56,6 +56,12 @@ public class AuthServiceTests
 
         var mockLogger = new Mock<ILogger<AuthService>>();
         var mockEmailService = new Mock<IEmailService>();
+        mockEmailService.Setup(s => s.SendVerificationCodeAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+        mockEmailService.Setup(s => s.SendPasswordResetAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
         _service = new AuthService(_mockDb.Object, config, new HttpClient(), mockLogger.Object, mockEmailService.Object);
     }
 

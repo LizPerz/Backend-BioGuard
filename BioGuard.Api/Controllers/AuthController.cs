@@ -118,8 +118,8 @@ public class AuthController : ControllerBase
         var result = await _authService.Enviar2FAAsync(request);
         if (!result)
         {
-            _logger.LogWarning("2FA send failed for email: {Email} - email not found or inactive", request.Correo);
-            return BadRequest(new { message = "Correo no encontrado o inactivo" });
+            _logger.LogWarning("2FA send failed for email: {Email} - user not found/inactive or email delivery error", request.Correo);
+            return BadRequest(new { message = "No se pudo enviar el código al correo. Verifica tu dirección o intenta más tarde." });
         }
         _logger.LogInformation("2FA code sent to email: {Email}", request.Correo);
         return Ok(new { message = "Código enviado al correo" });

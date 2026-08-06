@@ -393,11 +393,14 @@ public class AuthService
             .Set(u => u.TwoFactorVerificado, false);
 
         await _db.UsuariosWeb.UpdateOneAsync(u => u.Id == user.Id, update);
-        _logger.LogInformation("2FA code sent to user: {UserId}", user.Id);
+        _logger.LogInformation("2FA code stored for user: {UserId}", user.Id);
 
-        await _emailService.SendVerificationCodeAsync(user.Correo, $"{user.Nombre} {user.ApellidoPaterno}", codigo);
-
-        return true;
+        var sent = await _emailService.SendVerificationCodeAsync(user.Correo, $"{user.Nombre} {user.ApellidoPaterno}", codigo);
+        if (!sent)
+        {
+            _logger.LogWarning("2FA code could not be emailed to user: {UserId} - email delivery failed", user.Id);
+        }
+        return sent;
     }
 
     public async Task<AuthResponse?> Verificar2FAAsync(Verificar2FARequest request)
