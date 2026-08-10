@@ -40,6 +40,28 @@ public class SensoresController : ControllerBase
     // ── Lecturas (Envío de datos) ─────────────────────────────
 
     /// <summary>
+    /// Resuelve el pacienteId de la petición:
+    /// 1. Prioriza el claim JWT "paciente_id" (emitido en login-codigo, rol paciente).
+    /// 2. Si no existe (login-web, rol dueno/cuidador), usa el pacienteId del body
+    ///    y valida que el usuario tenga ownership sobre ese paciente.
+    /// </summary>
+    private async Task<string?> ResolverPacienteIdAsync(string? bodyPacienteId)
+    {
+        var claimPacienteId = User.FindFirst("paciente_id")?.Value;
+        if (!string.IsNullOrEmpty(claimPacienteId)) return claimPacienteId;
+
+        if (string.IsNullOrEmpty(bodyPacienteId)) return null;
+
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId) || string.IsNullOrEmpty(role)) return null;
+
+        return await _ownershipHelper.VerifyPacienteOwnershipAsync(bodyPacienteId, usuarioId, role)
+            ? bodyPacienteId
+            : null;
+    }
+
+    /// <summary>
     /// POST /api/Sensores/lectura [MÓVIL]
     /// MÓDULO 5: Recibir lectura individual del WearOS (cada 10s)
     /// Calcula el riesgo en ese instante vía el microservicio ML en lugar de guardar 0.0 fijo.
@@ -47,7 +69,7 @@ public class SensoresController : ControllerBase
     [HttpPost("lectura")]
     public async Task<IActionResult> RecibirLectura([FromBody] LecturaSensorRequest request)
     {
-        var pacienteId = User.FindFirst("paciente_id")?.Value;
+        var pacienteId = await ResolverPacienteIdAsync(request.PacienteId);
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
         _logger.LogInformation("Receiving sensor reading for paciente: {PacienteId}", pacienteId);
@@ -71,7 +93,7 @@ public class SensoresController : ControllerBase
     [RequestSizeLimit(10485760)]
     public async Task<IActionResult> RecibirLecturaBatch([FromBody] List<LecturaSensorRequest> request)
     {
-        var pacienteId = User.FindFirst("paciente_id")?.Value;
+        var pacienteId = await ResolverPacienteIdAsync(request.FirstOrDefault()?.PacienteId);
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
         _logger.LogInformation("Receiving batch of {Count} sensor readings for paciente: {PacienteId}", request.Count, pacienteId);
@@ -291,12 +313,13 @@ public class SensoresController : ControllerBase
     [HttpPost("evento")]
     public async Task<IActionResult> CrearEvento([FromBody] CrearEventoRequest request)
     {
-        var pacienteId = User.FindFirst("paciente_id")?.Value;
+        var pacienteId = await ResolverPacienteIdAsync(request.PacienteId);
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
+        var probabilidad = request.Probabilidad ?? request.ProbabilidadMl ?? 0.0;
         _logger.LogInformation("Creating metabolic event for paciente: {PacienteId}, risk: {NivelRiesgo}", pacienteId, request.NivelRiesgo);
         var evento = await _sensorService.CrearEventoAsync(
-            pacienteId, request.Probabilidad, request.NivelRiesgo, request.Descripcion);
+            pacienteId, probabilidad, request.NivelRiesgo, request.Descripcion);
 
         return Ok(new { EventoId = evento.Id, message = "Evento creado" });
     }
@@ -417,7 +440,7 @@ public class SensoresController : ControllerBase
     [HttpPost("tracking")]
     public async Task<IActionResult> InsertarTracking([FromBody] TrackingGpsRequest request)
     {
-        var pacienteId = User.FindFirst("paciente_id")?.Value;
+        var pacienteId = await ResolverPacienteIdAsync(request.PacienteId);
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
         _logger.LogInformation("Inserting GPS tracking for paciente: {PacienteId}, emergency: {EsEmergencia}", pacienteId, request.EsEmergencia);
@@ -435,7 +458,7 @@ public class SensoresController : ControllerBase
     [RequestSizeLimit(10485760)]
     public async Task<IActionResult> InsertarTrackingBatch([FromBody] List<TrackingGpsRequest> request)
     {
-        var pacienteId = User.FindFirst("paciente_id")?.Value;
+        var pacienteId = await ResolverPacienteIdAsync(request.FirstOrDefault()?.PacienteId);
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
         _logger.LogInformation("Inserting GPS batch of {Count} records for paciente: {PacienteId}", request.Count, pacienteId);
@@ -512,4 +535,9 @@ public class SensoresController : ControllerBase
 }
 
 public record CrearEventoRequest(
-    double Probabilidad, string NivelRiesgo, string Descripcion);
+    double? Probabilidad = null,
+    string NivelRiesgo = "",
+    string Descripcion = "",
+    double? ProbabilidadMl = null,
+    string? PacienteId = null,
+    string? DispositivoMac = null);
