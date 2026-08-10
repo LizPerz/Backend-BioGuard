@@ -122,7 +122,8 @@ public record VincularCuidadorRequest(
 public record LecturaSensorRequest(
     [Range(20, 300)] int PulsoBpm,
     [Range(30.0, 45.0)] double TemperaturaC,
-    [Range(0.0, 100.0)] double SudoracionGsr);
+    [Range(0.0, 100.0)] double SudoracionGsr,
+    string? PacienteId = null);
 
 public record EventoMetabolicoResponse(
     string Id, string NivelRiesgo, double ProbabilidadMl,
@@ -134,7 +135,8 @@ public record AtenderEventoRequest(
 public record TrackingGpsRequest(
     [Range(-180.0, 180.0)] double Longitud,
     [Range(-90.0, 90.0)] double Latitud,
-    bool EsEmergencia);
+    bool EsEmergencia,
+    string? PacienteId = null);
 
 public record TrackingResponse(
     double Longitud, double Latitud, DateTime Timestamp, bool EsEmergencia);
@@ -180,4 +182,5 @@ public record PagoResponse(
 
 public record VincularDispositivoRequest(
     [Required] [StringLength(200)] string Nombre,
-    [Required] [StringLength(50)] string MacAddress);
+    [Required] [StringLength(50)] string MacAddress,
+    string? PacienteId = null);

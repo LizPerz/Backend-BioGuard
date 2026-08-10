@@ -38,7 +38,7 @@ public class DispositivosController : ControllerBase
     [HttpPost("vincular")]
     public async Task<IActionResult> Vincular([FromBody] VincularDispositivoRequest request)
     {
-        var pacienteId = User.FindFirst("paciente_id")?.Value;
+        var pacienteId = await ResolverPacienteIdAsync(request.PacienteId);
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
         _logger.LogInformation("Linking device for patient {PacienteId}", pacienteId);
@@ -59,7 +59,7 @@ public class DispositivosController : ControllerBase
     [HttpPost("heartbeat")]
     public async Task<IActionResult> Heartbeat([FromBody] HeartbeatRequest request)
     {
-        var pacienteId = User.FindFirst("paciente_id")?.Value;
+        var pacienteId = await ResolverPacienteIdAsync(request.PacienteId);
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
         _logger.LogDebug("Heartbeat received for patient {PacienteId}", pacienteId);
@@ -68,6 +68,28 @@ public class DispositivosController : ControllerBase
     }
 
     // ── Consulta ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Resuelve el pacienteId de la petición:
+    /// 1. Prioriza el claim JWT "paciente_id" (emitido en login-codigo, rol paciente).
+    /// 2. Si no existe (login-web, rol dueno/cuidador), usa el pacienteId del body
+    ///    y valida que el usuario tenga ownership sobre ese paciente.
+    /// </summary>
+    private async Task<string?> ResolverPacienteIdAsync(string? bodyPacienteId)
+    {
+        var claimPacienteId = User.FindFirst("paciente_id")?.Value;
+        if (!string.IsNullOrEmpty(claimPacienteId)) return claimPacienteId;
+
+        if (string.IsNullOrEmpty(bodyPacienteId)) return null;
+
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId) || string.IsNullOrEmpty(role)) return null;
+
+        return await _ownershipHelper.VerifyPacienteOwnershipAsync(bodyPacienteId, usuarioId, role)
+            ? bodyPacienteId
+            : null;
+    }
 
     /// <summary>
     /// GET /api/Dispositivos/{pacienteId} [MÓVIL]
