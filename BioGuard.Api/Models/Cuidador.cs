@@ -41,4 +41,7 @@ public class Cuidador
 
     [BsonElement("fecha_autorizacion")]
     public DateTime FechaAutorizacion { get; set; } = DateTime.UtcNow;
+
+    [BsonElement("foto")]
+    public string? Foto { get; set; }
 }

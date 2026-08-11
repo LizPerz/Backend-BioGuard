@@ -97,7 +97,7 @@ public record UpdateNombreRequest(
 
 public record CuidadorResponse(
     string Id, string Nombre, string Parentesco,
-    string PacienteId, string Telefono = "", string Correo = "");
+    string PacienteId, string Telefono = "", string Correo = "", string? Foto = null);
 
 public record CrearCuidadorRequest(
     [Required] string PacienteId,

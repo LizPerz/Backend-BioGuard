@@ -397,6 +397,15 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// No-store: la web y la app siempre reciben los datos más recientes
+// (fotos, perfiles, alertas) sin versiones cacheadas del navegador.
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    context.Response.Headers.Pragma = "no-cache";
+    await next();
+});
+
 app.Use(async (context, next) =>
 {
     try
