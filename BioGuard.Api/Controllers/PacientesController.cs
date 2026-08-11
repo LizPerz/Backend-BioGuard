@@ -327,6 +327,64 @@ public class PacientesController : ControllerBase
         });
     }
 
+    // ── Foto de perfil del paciente ─────────────────────────────
+
+    /// <summary>
+    /// PUT /api/Pacientes/{id}/foto [WEB + MÓVIL]
+    /// MÓDULO 3: Subir foto de perfil del paciente (base64).
+    /// La misma foto se muestra en la app (paciente/cuidador) y en la web.
+    /// </summary>
+    [HttpPut("{id}/foto")]
+    [RequestSizeLimit(1048576)]
+    public async Task<IActionResult> SubirFoto(string id, [FromBody] SubirFotoRequest request)
+    {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(id, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed uploading photo - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
+            return Forbid();
+        }
+
+        var result = await _pacienteService.SubirFotoAsync(id, request.FotoBase64);
+        if (!result)
+        {
+            _logger.LogWarning("Photo upload failed for paciente: {PacienteId}", id);
+            return NotFound();
+        }
+        _logger.LogInformation("Photo updated for paciente: {PacienteId}", id);
+        return Ok(new { message = "Foto actualizada" });
+    }
+
+    /// <summary>
+    /// DELETE /api/Pacientes/{id}/foto [WEB + MÓVIL]
+    /// MÓDULO 3: Eliminar la foto de perfil del paciente
+    /// </summary>
+    [HttpDelete("{id}/foto")]
+    public async Task<IActionResult> EliminarFoto(string id)
+    {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(id, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed deleting photo - user: {UserId}, paciente: {PacienteId}", usuarioId, id);
+            return Forbid();
+        }
+
+        var result = await _pacienteService.EliminarFotoAsync(id);
+        if (!result)
+        {
+            _logger.LogWarning("Photo delete failed for paciente: {PacienteId}", id);
+            return NotFound();
+        }
+        _logger.LogInformation("Photo deleted for paciente: {PacienteId}", id);
+        return Ok(new { message = "Foto eliminada" });
+    }
+
     private static PacienteResponse ToResponse(Paciente paciente) => new(
         paciente.Id,
         paciente.Nombre,
@@ -339,6 +397,7 @@ public class PacientesController : ControllerBase
         string.IsNullOrEmpty(paciente.Biometria?.Sexo) ? null : paciente.Biometria.Sexo,
         paciente.Biometria?.FamiliaresDiabetes ?? false,
         string.IsNullOrEmpty(paciente.Biometria?.ActividadFisica) ? null : paciente.Biometria.ActividadFisica,
-        paciente.CodigoAccesoQr);
+        paciente.CodigoAccesoQr,
+        paciente.Foto);
 
 }
