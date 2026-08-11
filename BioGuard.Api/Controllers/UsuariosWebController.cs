@@ -17,13 +17,99 @@ namespace BioGuard.Api.Controllers;
 public class UsuariosWebController : ControllerBase
 {
     private readonly UsuariosWebService _usuariosWebService;
+    private readonly PacienteService _pacienteService;
+    private readonly CuidadorService _cuidadorService;
     private readonly ILogger<UsuariosWebController> _logger;
 
-    public UsuariosWebController(UsuariosWebService usuariosWebService, ILogger<UsuariosWebController> logger)
+    public UsuariosWebController(
+        UsuariosWebService usuariosWebService,
+        PacienteService pacienteService,
+        CuidadorService cuidadorService,
+        ILogger<UsuariosWebController> logger)
     {
         _usuariosWebService = usuariosWebService;
+        _pacienteService = pacienteService;
+        _cuidadorService = cuidadorService;
         _logger = logger;
     }
+
+    // ── Acceso efectivo ────────────────────────────────────
+
+    /// <summary>
+    /// GET /api/UsuariosWeb/mi-acceso [WEB/MÓVIL]
+    /// Devuelve el rol efectivo del usuario, el paciente vinculado,
+    /// el plan y los permisos de la sesión actual.
+    /// </summary>
+    [HttpGet("mi-acceso")]
+    public async Task<IActionResult> MiAcceso()
+    {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        var rol = User.FindFirst(ClaimTypes.Role)?.Value ?? "dueno";
+        _logger.LogInformation("Getting effective access for user {UsuarioId} role {Rol}", usuarioId, rol);
+
+        string? pacienteId = null;
+        string? nivelAccesoCuidador = null;
+        bool cuidadorDentroDelPlan = false;
+        PlanResponse? plan = null;
+
+        switch (rol)
+        {
+            case "cuidador":
+                var cuidador = await _cuidadorService.ObtenerPorIdAsync(usuarioId);
+                if (cuidador != null)
+                {
+                    pacienteId = cuidador.PacienteId;
+                    cuidadorDentroDelPlan = true;
+                }
+                break;
+            case "paciente":
+                pacienteId = usuarioId;
+                break;
+            default:
+                var pacientes = await _pacienteService.GetAllByUsuarioAsync(usuarioId);
+                pacienteId = pacientes.FirstOrDefault()?.Id;
+                var planActual = await _usuariosWebService.GetPlanAsync(usuarioId);
+                if (planActual != null)
+                {
+                    plan = new PlanResponse(
+                        planActual.Id, planActual.Nombre, planActual.Precio, planActual.PrecioMoneda,
+                        planActual.LimitePacientes, planActual.LimiteCuidadores, planActual.DiasHistorial,
+                        planActual.GpsContinuo, planActual.AiConsole, planActual.Descripcion);
+                }
+                break;
+        }
+
+        return Ok(new
+        {
+            rol,
+            pacienteId,
+            nivelAccesoCuidador,
+            cuidadorDentroDelPlan,
+            plan,
+            permisos = PermisosParaRol(rol)
+        });
+    }
+
+    private static List<string> PermisosParaRol(string rol) => rol switch
+    {
+        "admin" => new List<string> { "admin.panel", "account.profile", "account.sessions" },
+        "cuidador" => new List<string> { "account.profile", "account.sessions", "alert.read", "alert.acknowledge" },
+        "paciente" => new List<string>
+        {
+            "account.profile", "account.sessions", "patient.read", "patient.manage",
+            "alert.read", "alert.acknowledge", "health.summary", "health.history",
+            "medication.read", "medication.take", "device.read", "device.pair"
+        },
+        _ => new List<string>
+        {
+            "account.profile", "account.sessions", "patient.create", "patient.read", "patient.manage",
+            "alert.read", "alert.acknowledge", "health.summary", "health.history",
+            "medication.read", "medication.take", "medication.manage", "caregiver.manage",
+            "billing.manage", "device.read", "device.pair"
+        }
+    };
 
     // ── Perfil ────────────────────────────────────────────────
 
