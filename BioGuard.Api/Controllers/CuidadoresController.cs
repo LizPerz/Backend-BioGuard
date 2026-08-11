@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
@@ -23,14 +24,16 @@ public class CuidadoresController : ControllerBase
     private readonly CuidadorService _cuidadorService;
     private readonly PacienteService _pacienteService;
     private readonly IMongoDbContext _db;
+    private readonly IHubContext<BioGuardHub> _hub;
     private readonly ILogger<CuidadoresController> _logger;
     private readonly OwnershipHelper _ownershipHelper;
 
-    public CuidadoresController(CuidadorService cuidadorService, PacienteService pacienteService, IMongoDbContext db, ILogger<CuidadoresController> logger, OwnershipHelper ownershipHelper)
+    public CuidadoresController(CuidadorService cuidadorService, PacienteService pacienteService, IMongoDbContext db, IHubContext<BioGuardHub> hub, ILogger<CuidadoresController> logger, OwnershipHelper ownershipHelper)
     {
         _cuidadorService = cuidadorService;
         _pacienteService = pacienteService;
         _db = db;
+        _hub = hub;
         _logger = logger;
         _ownershipHelper = ownershipHelper;
     }
@@ -169,6 +172,7 @@ public class CuidadoresController : ControllerBase
             request.Telefono, request.Correo);
 
         _logger.LogInformation("Cuidador created successfully for user: {UserId}", usuarioId);
+        await _hub.Clients.Group($"paciente_{request.PacienteId}").SendAsync("CuidadoresActualizados", new { pacienteId = request.PacienteId });
         return Ok(new { CuidadorId = cuidador?.Id ?? "", CodigoAccesoQr = codigo, CodigoExpira = DateTime.UtcNow.AddMinutes(CuidadorService.CodigoVigenciaMinutos), message = "Cuidador creado" });
     }
 
@@ -215,6 +219,7 @@ public class CuidadoresController : ControllerBase
             return NotFound();
         }
         _logger.LogInformation("Cuidador updated successfully: {CuidadorId}", id);
+        await _hub.Clients.Group($"paciente_{cuidador.PacienteId}").SendAsync("CuidadoresActualizados", new { pacienteId = cuidador.PacienteId });
         return Ok(new { message = "Cuidador actualizado" });
     }
 
@@ -249,6 +254,7 @@ public class CuidadoresController : ControllerBase
             return NotFound();
         }
         _logger.LogInformation("Cuidador deleted successfully: {CuidadorId}", id);
+        await _hub.Clients.Group($"paciente_{cuidador.PacienteId}").SendAsync("CuidadoresActualizados", new { pacienteId = cuidador.PacienteId });
         return NoContent();
     }
 

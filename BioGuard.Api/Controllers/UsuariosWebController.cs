@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
@@ -19,17 +20,20 @@ public class UsuariosWebController : ControllerBase
     private readonly UsuariosWebService _usuariosWebService;
     private readonly PacienteService _pacienteService;
     private readonly CuidadorService _cuidadorService;
+    private readonly IHubContext<BioGuardHub> _hub;
     private readonly ILogger<UsuariosWebController> _logger;
 
     public UsuariosWebController(
         UsuariosWebService usuariosWebService,
         PacienteService pacienteService,
         CuidadorService cuidadorService,
+        IHubContext<BioGuardHub> hub,
         ILogger<UsuariosWebController> logger)
     {
         _usuariosWebService = usuariosWebService;
         _pacienteService = pacienteService;
         _cuidadorService = cuidadorService;
+        _hub = hub;
         _logger = logger;
     }
 
@@ -208,6 +212,7 @@ public class UsuariosWebController : ControllerBase
             _logger.LogWarning("Profile update failed for user {UsuarioId}", usuarioId);
             return NotFound();
         }
+        await EmitirActualizacionPerfilAsync(usuarioId);
         return Ok(new { message = "Perfil actualizado" });
     }
 
@@ -256,6 +261,7 @@ public class UsuariosWebController : ControllerBase
                 return NotFound();
             }
             _logger.LogInformation("Photo updated for cuidador {CuidadorId}", usuarioId);
+            await EmitirFotoActualizadaAsync(usuarioId, rol, request.FotoBase64);
             return Ok(new { message = "Foto actualizada" });
         }
 
@@ -269,6 +275,7 @@ public class UsuariosWebController : ControllerBase
                 return NotFound();
             }
             _logger.LogInformation("Photo updated for paciente {PacienteId}", pacienteId);
+            await EmitirFotoActualizadaAsync(usuarioId, rol, request.FotoBase64);
             return Ok(new { message = "Foto actualizada" });
         }
 
@@ -278,6 +285,7 @@ public class UsuariosWebController : ControllerBase
             _logger.LogWarning("Photo upload failed for user {UsuarioId}", usuarioId);
             return NotFound();
         }
+        await EmitirFotoActualizadaAsync(usuarioId, rol, request.FotoBase64);
         return Ok(new { message = "Foto actualizada" });
     }
 
@@ -303,6 +311,7 @@ public class UsuariosWebController : ControllerBase
                 return NotFound();
             }
             _logger.LogInformation("Photo deleted for cuidador {CuidadorId}", usuarioId);
+            await EmitirFotoActualizadaAsync(usuarioId, rol, null);
             return Ok(new { message = "Foto eliminada" });
         }
 
@@ -316,6 +325,7 @@ public class UsuariosWebController : ControllerBase
                 return NotFound();
             }
             _logger.LogInformation("Photo deleted for paciente {PacienteId}", pacienteId);
+            await EmitirFotoActualizadaAsync(usuarioId, rol, null);
             return Ok(new { message = "Foto eliminada" });
         }
 
@@ -325,6 +335,7 @@ public class UsuariosWebController : ControllerBase
             _logger.LogWarning("Photo delete failed for user {UsuarioId}", usuarioId);
             return NotFound();
         }
+        await EmitirFotoActualizadaAsync(usuarioId, rol, null);
         return Ok(new { message = "Foto eliminada" });
     }
 
@@ -334,6 +345,35 @@ public class UsuariosWebController : ControllerBase
         // su foto es propia (campo Foto del Cuidador), no la del paciente vinculado.
         if (rol == "paciente") return usuarioId;
         return null;
+    }
+
+    private async Task<string?> ResolverGrupoPacienteAsync(string usuarioId, string rol)
+    {
+        return rol switch
+        {
+            "cuidador" => (await _cuidadorService.ObtenerPorIdAsync(usuarioId))?.PacienteId,
+            "paciente" => usuarioId,
+            _ => (await _pacienteService.GetAllByUsuarioAsync(usuarioId)).FirstOrDefault()?.Id
+        };
+    }
+
+    private async Task EmitirFotoActualizadaAsync(string usuarioId, string rol, string? fotoBase64)
+    {
+        var grupo = await ResolverGrupoPacienteAsync(usuarioId, rol);
+        if (!string.IsNullOrEmpty(grupo))
+        {
+            await _hub.Clients.Group($"paciente_{grupo}").SendAsync("FotoActualizada", new { pacienteId = grupo, foto = fotoBase64 });
+        }
+    }
+
+    private async Task EmitirActualizacionPerfilAsync(string usuarioId)
+    {
+        var rol = User.FindFirst(ClaimTypes.Role)?.Value ?? "dueno";
+        var grupo = await ResolverGrupoPacienteAsync(usuarioId, rol);
+        if (!string.IsNullOrEmpty(grupo))
+        {
+            await _hub.Clients.Group($"paciente_{grupo}").SendAsync("PerfilActualizado", new { pacienteId = grupo });
+        }
     }
 
     // ── Plan / Suscripción ────────────────────────────────────

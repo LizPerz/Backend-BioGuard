@@ -33,6 +33,21 @@ public class BioGuardHub : Hub
         await Clients.Group($"paciente_{pacienteId}").SendAsync("UbicacionActualizada", ubicacion);
     }
 
+    public async Task SendPerfilActualizado(string pacienteId)
+    {
+        await Clients.Group($"paciente_{pacienteId}").SendAsync("PerfilActualizado", new { pacienteId });
+    }
+
+    public async Task SendFotoActualizada(string pacienteId, string? fotoBase64)
+    {
+        await Clients.Group($"paciente_{pacienteId}").SendAsync("FotoActualizada", new { pacienteId, foto = fotoBase64 });
+    }
+
+    public async Task SendCuidadoresActualizados(string pacienteId)
+    {
+        await Clients.Group($"paciente_{pacienteId}").SendAsync("CuidadoresActualizados", new { pacienteId });
+    }
+
     public override async Task OnConnectedAsync()
     {
         await base.OnConnectedAsync();

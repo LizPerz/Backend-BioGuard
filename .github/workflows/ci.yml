@@ -133,16 +133,28 @@ jobs:
 
       - name: Build and push ML service
         id: push-ml
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        with:
-          context: MLServicePython
-          file: MLServicePython/Dockerfile
-          push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}-ml:sha-${{ github.sha }}
-            ${{ env.IMAGE_NAME }}-ml:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.IMAGE_NAME }}-ml"
+          SHA_TAG="$IMAGE:sha-${{ github.sha }}"
+          LATEST_TAG="$IMAGE:latest"
+          for attempt in 1 2 3; do
+            echo "=== Build and push ML image (attempt $attempt/3) ==="
+            if docker buildx build --push \
+              --file MLServicePython/Dockerfile \
+              --tag "$SHA_TAG" --tag "$LATEST_TAG" \
+              --cache-from type=gha --cache-to type=gha,mode=max \
+              MLServicePython; then
+              DIGEST="$(docker buildx imagetools inspect "$SHA_TAG" --format '{{.Manifest.Digest}}')"
+              echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+              echo "ML image pushed: $SHA_TAG@$DIGEST"
+              exit 0
+            fi
+            echo "::warning::ML image push failed on attempt $attempt (posible secondary rate limit de GHCR). Reintentando..."
+            sleep 30
+          done
+          echo "::error::ML image push failed after 3 attempts"
+          exit 1
 
       - name: Generate SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
