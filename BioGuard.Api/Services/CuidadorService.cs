@@ -132,6 +132,32 @@ public class CuidadorService
         return codigo;
     }
 
+    public async Task<bool> SubirFotoAsync(string cuidadorId, string fotoBase64)
+    {
+        var update = Builders<Cuidador>.Update.Set(c => c.Foto, fotoBase64);
+        var result = await _db.Cuidadores.UpdateOneAsync(c => c.Id == cuidadorId, update);
+        if (result.MatchedCount == 0)
+        {
+            _logger.LogWarning("Photo upload not found caregiver: {CuidadorId}", cuidadorId);
+            return false;
+        }
+        _logger.LogInformation("Photo updated for caregiver: {CuidadorId}", cuidadorId);
+        return true;
+    }
+
+    public async Task<bool> EliminarFotoAsync(string cuidadorId)
+    {
+        var update = Builders<Cuidador>.Update.Set(c => c.Foto, null);
+        var result = await _db.Cuidadores.UpdateOneAsync(c => c.Id == cuidadorId, update);
+        if (result.MatchedCount == 0)
+        {
+            _logger.LogWarning("Photo delete not found caregiver: {CuidadorId}", cuidadorId);
+            return false;
+        }
+        _logger.LogInformation("Photo deleted for caregiver: {CuidadorId}", cuidadorId);
+        return true;
+    }
+
     private static string GenerarCodigo()
     {
         var numeros = new char[8];

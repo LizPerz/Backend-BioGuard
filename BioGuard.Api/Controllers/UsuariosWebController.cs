@@ -157,7 +157,6 @@ public class UsuariosWebController : ControllerBase
                     _logger.LogWarning("Caregiver {CuidadorId} not found", usuarioId);
                     return NotFound();
                 }
-                var pacienteDelCuidador = await _pacienteService.GetByIdAsync(cuidador.PacienteId);
                 return Ok(new
                 {
                     Id = cuidador.Id,
@@ -165,7 +164,7 @@ public class UsuariosWebController : ControllerBase
                     ApellidoPaterno = (string?)null,
                     ApellidoMaterno = (string?)null,
                     Correo = cuidador.Correo,
-                    FotoPerfil = pacienteDelCuidador?.Foto,
+                    FotoPerfil = cuidador.Foto,
                     FechaRegistro = cuidador.FechaAutorizacion,
                     Plan = (string?)null
                 });
@@ -248,7 +247,19 @@ public class UsuariosWebController : ControllerBase
         var rol = User.FindFirst(ClaimTypes.Role)?.Value ?? "dueno";
         _logger.LogInformation("Uploading photo for user {UsuarioId} role {Rol}", usuarioId, rol);
 
-        var pacienteId = await ResolverPacienteIdAsync(usuarioId, rol);
+        if (rol == "cuidador")
+        {
+            var resultCuidador = await _cuidadorService.SubirFotoAsync(usuarioId, request.FotoBase64);
+            if (!resultCuidador)
+            {
+                _logger.LogWarning("Photo upload failed for cuidador {CuidadorId}", usuarioId);
+                return NotFound();
+            }
+            _logger.LogInformation("Photo updated for cuidador {CuidadorId}", usuarioId);
+            return Ok(new { message = "Foto actualizada" });
+        }
+
+        var pacienteId = ResolverPacienteIdAsync(usuarioId, rol);
         if (pacienteId != null)
         {
             var result = await _pacienteService.SubirFotoAsync(pacienteId, request.FotoBase64);
@@ -283,7 +294,19 @@ public class UsuariosWebController : ControllerBase
         var rol = User.FindFirst(ClaimTypes.Role)?.Value ?? "dueno";
         _logger.LogInformation("Deleting photo for user {UsuarioId} role {Rol}", usuarioId, rol);
 
-        var pacienteId = await ResolverPacienteIdAsync(usuarioId, rol);
+        if (rol == "cuidador")
+        {
+            var resultCuidador = await _cuidadorService.EliminarFotoAsync(usuarioId);
+            if (!resultCuidador)
+            {
+                _logger.LogWarning("Photo delete failed for cuidador {CuidadorId}", usuarioId);
+                return NotFound();
+            }
+            _logger.LogInformation("Photo deleted for cuidador {CuidadorId}", usuarioId);
+            return Ok(new { message = "Foto eliminada" });
+        }
+
+        var pacienteId = ResolverPacienteIdAsync(usuarioId, rol);
         if (pacienteId != null)
         {
             var result = await _pacienteService.EliminarFotoAsync(pacienteId);
@@ -305,18 +328,12 @@ public class UsuariosWebController : ControllerBase
         return Ok(new { message = "Foto eliminada" });
     }
 
-    private async Task<string?> ResolverPacienteIdAsync(string usuarioId, string rol)
+    private string? ResolverPacienteIdAsync(string usuarioId, string rol)
     {
-        switch (rol)
-        {
-            case "paciente":
-                return usuarioId;
-            case "cuidador":
-                var cuidador = await _cuidadorService.ObtenerPorIdAsync(usuarioId);
-                return cuidador?.PacienteId;
-            default:
-                return null;
-        }
+        // El rol cuidador se maneja explícitamente en SubirFoto/EliminarFoto:
+        // su foto es propia (campo Foto del Cuidador), no la del paciente vinculado.
+        if (rol == "paciente") return usuarioId;
+        return null;
     }
 
     // ── Plan / Suscripción ────────────────────────────────────

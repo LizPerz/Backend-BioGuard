@@ -50,7 +50,7 @@ public class CuidadoresController : ControllerBase
         _logger.LogInformation("Listing cuidadores for user: {UserId}", usuarioId);
         var cuidadores = await _cuidadorService.ObtenerPorUsuarioAsync(usuarioId);
         var response = cuidadores.Select(c => new CuidadorResponse(
-            c.Id, c.Nombre, c.Parentesco, c.PacienteId, c.Telefono, c.Correo)).ToList();
+            c.Id, c.Nombre, c.Parentesco, c.PacienteId, c.Telefono, c.Correo, c.Foto)).ToList();
         return Ok(response);
     }
 
@@ -103,7 +103,7 @@ public class CuidadoresController : ControllerBase
 
         return Ok(new CuidadorResponse(
             cuidador.Id, cuidador.Nombre, cuidador.Parentesco,
-            cuidador.PacienteId, cuidador.Telefono, cuidador.Correo));
+            cuidador.PacienteId, cuidador.Telefono, cuidador.Correo, cuidador.Foto));
     }
 
     /// <summary>
@@ -126,7 +126,7 @@ public class CuidadoresController : ControllerBase
         _logger.LogInformation("Fetching cuidadores for paciente: {PacienteId}", pacienteId);
         var cuidadores = await _cuidadorService.ObtenerPorPacienteAsync(pacienteId);
         var response = cuidadores.Select(c => new CuidadorResponse(
-            c.Id, c.Nombre, c.Parentesco, c.PacienteId, c.Telefono, c.Correo)).ToList();
+            c.Id, c.Nombre, c.Parentesco, c.PacienteId, c.Telefono, c.Correo, c.Foto)).ToList();
         return Ok(response);
     }
 
