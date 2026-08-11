@@ -116,6 +116,9 @@ public class UsuariosWebController : ControllerBase
     /// <summary>
     /// GET /api/UsuariosWeb/mi-perfil [WEB]
     /// MÓDULO 2: Perfil completo del usuario + plan
+    /// Para roles paciente/cuidador (que entran por código) resuelve
+    /// la foto desde el paciente vinculado, para que sea la misma
+    /// en app y web.
     /// </summary>
     [HttpGet("mi-perfil")]
     public async Task<IActionResult> MiPerfil()
@@ -123,25 +126,70 @@ public class UsuariosWebController : ControllerBase
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        _logger.LogInformation("Getting profile for user {UsuarioId}", usuarioId);
-        var usuario = await _usuariosWebService.GetByIdAsync(usuarioId);
-        if (usuario == null)
-        {
-            _logger.LogWarning("User {UsuarioId} not found", usuarioId);
-            return NotFound();
-        }
+        var rol = User.FindFirst(ClaimTypes.Role)?.Value ?? "dueno";
+        _logger.LogInformation("Getting profile for user {UsuarioId} role {Rol}", usuarioId, rol);
 
-        return Ok(new
+        switch (rol)
         {
-            usuario.Id,
-            usuario.Nombre,
-            usuario.ApellidoPaterno,
-            usuario.ApellidoMaterno,
-            usuario.Correo,
-            usuario.FotoPerfil,
-            usuario.FechaRegistro,
-            Plan = (await _usuariosWebService.GetPlanAsync(usuarioId))?.Nombre ?? "Sin plan"
-        });
+            case "paciente":
+                var paciente = await _pacienteService.GetByIdAsync(usuarioId);
+                if (paciente == null)
+                {
+                    _logger.LogWarning("Patient {PacienteId} not found", usuarioId);
+                    return NotFound();
+                }
+                return Ok(new
+                {
+                    Id = paciente.Id,
+                    Nombre = paciente.Nombre,
+                    ApellidoPaterno = (string?)null,
+                    ApellidoMaterno = (string?)null,
+                    Correo = (string?)null,
+                    FotoPerfil = paciente.Foto,
+                    FechaRegistro = paciente.FechaRegistro,
+                    Plan = (string?)null
+                });
+
+            case "cuidador":
+                var cuidador = await _cuidadorService.ObtenerPorIdAsync(usuarioId);
+                if (cuidador == null)
+                {
+                    _logger.LogWarning("Caregiver {CuidadorId} not found", usuarioId);
+                    return NotFound();
+                }
+                var pacienteDelCuidador = await _pacienteService.GetByIdAsync(cuidador.PacienteId);
+                return Ok(new
+                {
+                    Id = cuidador.Id,
+                    Nombre = cuidador.Nombre,
+                    ApellidoPaterno = (string?)null,
+                    ApellidoMaterno = (string?)null,
+                    Correo = cuidador.Correo,
+                    FotoPerfil = pacienteDelCuidador?.Foto,
+                    FechaRegistro = cuidador.FechaAutorizacion,
+                    Plan = (string?)null
+                });
+
+            default:
+                var usuario = await _usuariosWebService.GetByIdAsync(usuarioId);
+                if (usuario == null)
+                {
+                    _logger.LogWarning("User {UsuarioId} not found", usuarioId);
+                    return NotFound();
+                }
+
+                return Ok(new
+                {
+                    usuario.Id,
+                    usuario.Nombre,
+                    usuario.ApellidoPaterno,
+                    usuario.ApellidoMaterno,
+                    usuario.Correo,
+                    usuario.FotoPerfil,
+                    usuario.FechaRegistro,
+                    Plan = (await _usuariosWebService.GetPlanAsync(usuarioId))?.Nombre ?? "Sin plan"
+                });
+        }
     }
 
     /// <summary>
@@ -185,8 +233,10 @@ public class UsuariosWebController : ControllerBase
     }
 
     /// <summary>
-    /// PUT /api/UsuariosWeb/mi-perfil/foto [WEB]
-    /// MÓDULO 2: Subir foto de perfil (base64 o URL)
+    /// PUT /api/UsuariosWeb/mi-perfil/foto [WEB + MÓVIL]
+    /// MÓDULO 2: Subir foto de perfil (base64 o URL).
+    /// Para paciente/cuidador guarda la foto en el paciente vinculado,
+    /// para que la misma foto se vea en app y web.
     /// </summary>
     [HttpPut("mi-perfil/foto")]
     [RequestSizeLimit(1048576)]
@@ -195,9 +245,24 @@ public class UsuariosWebController : ControllerBase
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        _logger.LogInformation("Uploading photo for user {UsuarioId}", usuarioId);
-        var result = await _usuariosWebService.SubirFotoAsync(usuarioId, request.FotoBase64);
-        if (!result)
+        var rol = User.FindFirst(ClaimTypes.Role)?.Value ?? "dueno";
+        _logger.LogInformation("Uploading photo for user {UsuarioId} role {Rol}", usuarioId, rol);
+
+        var pacienteId = await ResolverPacienteIdAsync(usuarioId, rol);
+        if (pacienteId != null)
+        {
+            var result = await _pacienteService.SubirFotoAsync(pacienteId, request.FotoBase64);
+            if (!result)
+            {
+                _logger.LogWarning("Photo upload failed for paciente {PacienteId}", pacienteId);
+                return NotFound();
+            }
+            _logger.LogInformation("Photo updated for paciente {PacienteId}", pacienteId);
+            return Ok(new { message = "Foto actualizada" });
+        }
+
+        var resultWeb = await _usuariosWebService.SubirFotoAsync(usuarioId, request.FotoBase64);
+        if (!resultWeb)
         {
             _logger.LogWarning("Photo upload failed for user {UsuarioId}", usuarioId);
             return NotFound();
@@ -206,7 +271,7 @@ public class UsuariosWebController : ControllerBase
     }
 
     /// <summary>
-    /// DELETE /api/UsuariosWeb/mi-perfil/foto [WEB]
+    /// DELETE /api/UsuariosWeb/mi-perfil/foto [WEB + MÓVIL]
     /// MÓDULO 2: Eliminar foto de perfil
     /// </summary>
     [HttpDelete("mi-perfil/foto")]
@@ -215,14 +280,43 @@ public class UsuariosWebController : ControllerBase
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        _logger.LogInformation("Deleting photo for user {UsuarioId}", usuarioId);
-        var result = await _usuariosWebService.EliminarFotoAsync(usuarioId);
-        if (!result)
+        var rol = User.FindFirst(ClaimTypes.Role)?.Value ?? "dueno";
+        _logger.LogInformation("Deleting photo for user {UsuarioId} role {Rol}", usuarioId, rol);
+
+        var pacienteId = await ResolverPacienteIdAsync(usuarioId, rol);
+        if (pacienteId != null)
+        {
+            var result = await _pacienteService.EliminarFotoAsync(pacienteId);
+            if (!result)
+            {
+                _logger.LogWarning("Photo delete failed for paciente {PacienteId}", pacienteId);
+                return NotFound();
+            }
+            _logger.LogInformation("Photo deleted for paciente {PacienteId}", pacienteId);
+            return Ok(new { message = "Foto eliminada" });
+        }
+
+        var resultWeb = await _usuariosWebService.EliminarFotoAsync(usuarioId);
+        if (!resultWeb)
         {
             _logger.LogWarning("Photo delete failed for user {UsuarioId}", usuarioId);
             return NotFound();
         }
         return Ok(new { message = "Foto eliminada" });
+    }
+
+    private async Task<string?> ResolverPacienteIdAsync(string usuarioId, string rol)
+    {
+        switch (rol)
+        {
+            case "paciente":
+                return usuarioId;
+            case "cuidador":
+                var cuidador = await _cuidadorService.ObtenerPorIdAsync(usuarioId);
+                return cuidador?.PacienteId;
+            default:
+                return null;
+        }
     }
 
     // ── Plan / Suscripción ────────────────────────────────────

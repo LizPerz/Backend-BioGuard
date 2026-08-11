@@ -153,6 +153,32 @@ public class PacienteService
         return codigo;
     }
 
+    public async Task<bool> SubirFotoAsync(string pacienteId, string fotoBase64)
+    {
+        var update = Builders<Paciente>.Update.Set(p => p.Foto, fotoBase64);
+        var result = await _db.Pacientes.UpdateOneAsync(p => p.Id == pacienteId, update);
+        if (result.MatchedCount == 0)
+        {
+            _logger.LogWarning("Photo upload not found patient: {PacienteId}", pacienteId);
+            return false;
+        }
+        _logger.LogInformation("Photo updated for patient: {PacienteId}", pacienteId);
+        return true;
+    }
+
+    public async Task<bool> EliminarFotoAsync(string pacienteId)
+    {
+        var update = Builders<Paciente>.Update.Set(p => p.Foto, null);
+        var result = await _db.Pacientes.UpdateOneAsync(p => p.Id == pacienteId, update);
+        if (result.MatchedCount == 0)
+        {
+            _logger.LogWarning("Photo delete not found patient: {PacienteId}", pacienteId);
+            return false;
+        }
+        _logger.LogInformation("Photo deleted for patient: {PacienteId}", pacienteId);
+        return true;
+    }
+
     private static string GenerarCodigo()
     {
         var numeros = new char[8];

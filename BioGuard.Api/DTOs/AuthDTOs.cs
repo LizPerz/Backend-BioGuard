@@ -68,7 +68,8 @@ public record PacienteResponse(
     string? Sexo = null,
     bool FamiliaresDiabetes = false,
     string? ActividadFisica = null,
-    string? CodigoAccesoQr = null);
+    string? CodigoAccesoQr = null,
+    string? Foto = null);
 
 public record UpdateBiometriaRequest(
     [Range(0, 150)] int Edad,
