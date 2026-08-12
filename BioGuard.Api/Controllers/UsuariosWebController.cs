@@ -37,6 +37,19 @@ public class UsuariosWebController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Normaliza la foto de perfil a data URI para que la Web pueda
+    /// renderizarla con &lt;img src&gt;. El móvil sube base64 crudo (JPEG) y la
+    /// Web sube data URI; ambos formatos deben funcionar en todas las plataformas.
+    /// </summary>
+    private static string? NormalizarFoto(string? foto)
+    {
+        if (string.IsNullOrWhiteSpace(foto)) return null;
+        var recorte = foto.Trim();
+        if (recorte.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return recorte;
+        return "data:image/jpeg;base64," + recorte;
+    }
+
     // ── Acceso efectivo ────────────────────────────────────
 
     /// <summary>
@@ -149,7 +162,7 @@ public class UsuariosWebController : ControllerBase
                     ApellidoPaterno = (string?)null,
                     ApellidoMaterno = (string?)null,
                     Correo = (string?)null,
-                    FotoPerfil = paciente.Foto,
+                    FotoPerfil = NormalizarFoto(paciente.Foto),
                     FechaRegistro = paciente.FechaRegistro,
                     Plan = (string?)null
                 });
@@ -168,7 +181,7 @@ public class UsuariosWebController : ControllerBase
                     ApellidoPaterno = (string?)null,
                     ApellidoMaterno = (string?)null,
                     Correo = cuidador.Correo,
-                    FotoPerfil = cuidador.Foto,
+                    FotoPerfil = NormalizarFoto(cuidador.Foto),
                     FechaRegistro = cuidador.FechaAutorizacion,
                     Plan = (string?)null
                 });
@@ -188,7 +201,7 @@ public class UsuariosWebController : ControllerBase
                     usuario.ApellidoPaterno,
                     usuario.ApellidoMaterno,
                     usuario.Correo,
-                    usuario.FotoPerfil,
+                    FotoPerfil = NormalizarFoto(usuario.FotoPerfil),
                     usuario.FechaRegistro,
                     Plan = (await _usuariosWebService.GetPlanAsync(usuarioId))?.Nombre ?? "Sin plan"
                 });
@@ -252,40 +265,42 @@ public class UsuariosWebController : ControllerBase
         var rol = User.FindFirst(ClaimTypes.Role)?.Value ?? "dueno";
         _logger.LogInformation("Uploading photo for user {UsuarioId} role {Rol}", usuarioId, rol);
 
+        var fotoNormalizada = NormalizarFoto(request.FotoBase64);
+
         if (rol == "cuidador")
         {
-            var resultCuidador = await _cuidadorService.SubirFotoAsync(usuarioId, request.FotoBase64);
+            var resultCuidador = await _cuidadorService.SubirFotoAsync(usuarioId, fotoNormalizada!);
             if (!resultCuidador)
             {
                 _logger.LogWarning("Photo upload failed for cuidador {CuidadorId}", usuarioId);
                 return NotFound();
             }
             _logger.LogInformation("Photo updated for cuidador {CuidadorId}", usuarioId);
-            await EmitirFotoActualizadaAsync(usuarioId, rol, request.FotoBase64);
+            await EmitirFotoActualizadaAsync(usuarioId, rol, fotoNormalizada);
             return Ok(new { message = "Foto actualizada" });
         }
 
         var pacienteId = ResolverPacienteIdAsync(usuarioId, rol);
         if (pacienteId != null)
         {
-            var result = await _pacienteService.SubirFotoAsync(pacienteId, request.FotoBase64);
+            var result = await _pacienteService.SubirFotoAsync(pacienteId, fotoNormalizada!);
             if (!result)
             {
                 _logger.LogWarning("Photo upload failed for paciente {PacienteId}", pacienteId);
                 return NotFound();
             }
             _logger.LogInformation("Photo updated for paciente {PacienteId}", pacienteId);
-            await EmitirFotoActualizadaAsync(usuarioId, rol, request.FotoBase64);
+            await EmitirFotoActualizadaAsync(usuarioId, rol, fotoNormalizada);
             return Ok(new { message = "Foto actualizada" });
         }
 
-        var resultWeb = await _usuariosWebService.SubirFotoAsync(usuarioId, request.FotoBase64);
+        var resultWeb = await _usuariosWebService.SubirFotoAsync(usuarioId, fotoNormalizada!);
         if (!resultWeb)
         {
             _logger.LogWarning("Photo upload failed for user {UsuarioId}", usuarioId);
             return NotFound();
         }
-        await EmitirFotoActualizadaAsync(usuarioId, rol, request.FotoBase64);
+        await EmitirFotoActualizadaAsync(usuarioId, rol, fotoNormalizada);
         return Ok(new { message = "Foto actualizada" });
     }
 
