@@ -2,6 +2,8 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Models;
+using BioGuard.Api.Config;
+using MongoDB.Driver;
 
 namespace BioGuard.Api.Services;
 
@@ -50,19 +52,19 @@ public class NotificacionMlService : INotificacionMlService
                 PacienteId = prediccion.PacienteId,
                 PrediccionId = prediccion.Id,
                 TipoEvento = "prediccion_critica",
-                Descripcion = GenerarDescripcion(prediccion),
+                Mensaje = GenerarDescripcion(prediccion),
                 NivelSeveridad = ObtenerSeveridad(prediccion),
-                DatosAdicionales = new
+                DatosContexto = new Dictionary<string, object>
                 {
-                    prediccion.ProbabilidadPico,
-                    prediccion.NivelRiesgo,
-                    prediccion.CasoClinico,
-                    prediccion.Imc,
-                    prediccion.Z,
-                    prediccion.Recomendacion
+                    { "ProbabilidadPico", prediccion.ProbabilidadPico },
+                    { "NivelRiesgo", prediccion.NivelRiesgo ?? "" },
+                    { "CasoClinico", prediccion.CasoClinico ?? "" },
+                    { "Imc", prediccion.Imc ?? 0 },
+                    { "Z", prediccion.Z ?? 0 },
+                    { "Recomendacion", prediccion.Recomendacion ?? "" }
                 },
                 FechaEvento = DateTime.UtcNow,
-                Enviado = false
+                EstadoEnvio = "PENDING"
             };
 
             // Guardar evento
@@ -72,11 +74,11 @@ public class NotificacionMlService : INotificacionMlService
             await DispararWebhooksAsync(evento);
 
             // Marcar como enviado
+            var update = Builders<NotificacionMlEvento>.Update
+                .Set(e => e.EstadoEnvio, "SENT");
             await _db.NotificacionesMlEventos.UpdateOneAsync(
                 e => e.Id == evento.Id,
-                new MongoDB.Driver.UpdateDefinitionBuilder<NotificacionMlEvento>()
-                    .Set(e => e.Enviado, true)
-                    .Set(e => e.FechaEnvio, DateTime.UtcNow)
+                update
             );
 
             _logger.LogInformation("Notificación critica enviada para predicción {Id}", prediccion.Id);
@@ -100,20 +102,20 @@ public class NotificacionMlService : INotificacionMlService
             {
                 PacienteId = pacienteId,
                 TipoEvento = "sincronizacion_completada",
-                Descripcion = $"Se sincronizaron {lote} reportes de predicción",
+                Mensaje = $"Se sincronizaron {lote} reportes de predicción",
                 NivelSeveridad = "info",
                 FechaEvento = DateTime.UtcNow,
-                Enviado = false
+                EstadoEnvio = "PENDING"
             };
 
             await _db.NotificacionesMlEventos.InsertOneAsync(evento);
             await DispararWebhooksAsync(evento);
 
+            var update = Builders<NotificacionMlEvento>.Update
+                .Set(e => e.EstadoEnvio, "SENT");
             await _db.NotificacionesMlEventos.UpdateOneAsync(
                 e => e.Id == evento.Id,
-                new MongoDB.Driver.UpdateDefinitionBuilder<NotificacionMlEvento>()
-                    .Set(e => e.Enviado, true)
-                    .Set(e => e.FechaEnvio, DateTime.UtcNow)
+                update
             );
         }
         catch (Exception ex)
@@ -145,10 +147,10 @@ public class NotificacionMlService : INotificacionMlService
     {
         return prediccion.NivelRiesgo?.ToLower() switch
         {
-            "crítico alto" => "critical",
-            "moderado alto" => "warning",
-            "moderado" => "warning",
-            _ => "info"
+            "crítico alto" => "CRÍTICO",
+            "moderado alto" => "ALTO",
+            "moderado" => "MODERADO",
+            _ => "INFO"
         };
     }
 
@@ -166,23 +168,4 @@ public class NotificacionMlService : INotificacionMlService
             _logger.LogError(ex, "Error disparando webhook para evento {Id}", evento.Id);
         }
     }
-}
-
-/// <summary>
-/// Modelo para eventos de notificación ML
-/// Almacena historial de notificaciones enviadas
-/// </summary>
-public class NotificacionMlEvento
-{
-    public string Id { get; set; } = MongoDB.Bson.ObjectId.GenerateNewId().ToString();
-    public string PacienteId { get; set; }
-    public string? PrediccionId { get; set; }
-    public string TipoEvento { get; set; } // prediccion_critica, sincronizacion_completada, etc.
-    public string Descripcion { get; set; }
-    public string NivelSeveridad { get; set; } // critical, warning, info
-    public object? DatosAdicionales { get; set; }
-    public DateTime FechaEvento { get; set; }
-    public DateTime? FechaEnvio { get; set; }
-    public bool Enviado { get; set; }
-    public int Reintentos { get; set; } = 0;
 }

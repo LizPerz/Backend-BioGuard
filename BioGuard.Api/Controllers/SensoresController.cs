@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using MongoDB.Driver;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Config;
@@ -267,7 +268,7 @@ public class SensoresController : ControllerBase
                 FechaExpiracion = DateTime.UtcNow.AddHours(6)
             };
 
-            await _db.PrediccionesML.InsertOneAsync(prediccion);
+            await _db.PrediccionesMl.InsertOneAsync(prediccion);
 
             var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -306,7 +307,7 @@ public class SensoresController : ControllerBase
 
         try
         {
-            var predicciones = await _db.PrediccionesML
+            var predicciones = await _db.PrediccionesMl
                 .Find(p => p.PacienteId == pacienteId)
                 .SortByDescending(p => p.FechaPrediccion)
                 .Limit(limite)
@@ -358,7 +359,7 @@ public class SensoresController : ControllerBase
 
         try
         {
-            var prediccion = await _db.PrediccionesML
+            var prediccion = await _db.PrediccionesMl
                 .Find(p => p.PacienteId == pacienteId)
                 .SortByDescending(p => p.FechaPrediccion)
                 .FirstOrDefaultAsync();
@@ -785,3 +786,4 @@ public record GuardarPrediccionRequest(
     string? Recomendacion = null,
     int? HorasEstimadas = null,
     string? ModeloVersion = null);
+
