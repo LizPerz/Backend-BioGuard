@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
+using BioGuard.Api.Models;
 
 namespace BioGuard.Api.Controllers;
 
@@ -368,7 +369,7 @@ public class UsuariosWebController : ControllerBase
         {
             "cuidador" => (await _cuidadorService.ObtenerPorIdAsync(usuarioId))?.PacienteId,
             "paciente" => usuarioId,
-            _ => (await _pacienteService.GetAllByUsuarioAsync(usuarioId)).FirstOrDefault()?.Id
+            _ => (await _pacienteService.GetAllByUsuarioAsync(usuarioId) ?? new List<Paciente>()).FirstOrDefault()?.Id
         };
     }
 

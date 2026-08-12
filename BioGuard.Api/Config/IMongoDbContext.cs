@@ -18,7 +18,6 @@ public interface IMongoDbContext
     IMongoCollection<Auditoria> Auditoria { get; }
     IMongoCollection<Pago> Pagos { get; }
     IMongoCollection<PrediccionMl> PrediccionesMl { get; }
-    IMongoCollection<ModeloMl> ModelosMl { get; }
     IMongoCollection<FcmToken> FcmTokens { get; }
     IMongoCollection<RefreshToken> RefreshTokens { get; }
     IMongoCollection<Medicamento> Medicamentos { get; }
@@ -27,6 +26,7 @@ public interface IMongoDbContext
     IMongoCollection<DeviceSession> DeviceSessions { get; }
     IMongoCollection<ReporteCompartido> ReportesCompartidos { get; }
     IMongoCollection<TicketSoporte> TicketsSoporte { get; }
+    IMongoCollection<NotificacionMlEvento> NotificacionesMlEventos { get; }
 
     Task<T?> FindFirstOrDefaultAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter);
     Task<List<T>> FindToListAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter);

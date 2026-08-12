@@ -124,6 +124,7 @@ public record LecturaSensorRequest(
     [Range(20, 300)] int PulsoBpm,
     [Range(30.0, 45.0)] double TemperaturaC,
     [Range(0.0, 100.0)] double SudoracionGsr,
+    [Range(0.0, 1.0)] double? ProbabilidadPico = null,
     string? PacienteId = null);
 
 public record EventoMetabolicoResponse(

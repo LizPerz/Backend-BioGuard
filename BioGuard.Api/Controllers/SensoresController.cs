@@ -1,7 +1,9 @@
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using MongoDB.Driver;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Config;
@@ -22,17 +24,19 @@ public class SensoresController : ControllerBase
     private readonly PacienteService _pacienteService;
     private readonly IMongoDbContext _db;
     private readonly AuditoriaService _auditoriaService;
-    private readonly MLPredictionClient _mlPredictionClient;
+    private readonly MLService _mlService;
+    private readonly INotificacionMlService _notificacionService;
     private readonly ILogger<SensoresController> _logger;
     private readonly OwnershipHelper _ownershipHelper;
 
-    public SensoresController(SensorService sensorService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, MLPredictionClient mlPredictionClient, ILogger<SensoresController> logger, OwnershipHelper ownershipHelper)
+    public SensoresController(SensorService sensorService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, MLService mlService, INotificacionMlService notificacionService, ILogger<SensoresController> logger, OwnershipHelper ownershipHelper)
     {
         _sensorService = sensorService;
         _pacienteService = pacienteService;
         _db = db;
         _auditoriaService = auditoriaService;
-        _mlPredictionClient = mlPredictionClient;
+        _mlService = mlService;
+        _notificacionService = notificacionService;
         _logger = logger;
         _ownershipHelper = ownershipHelper;
     }
@@ -64,7 +68,7 @@ public class SensoresController : ControllerBase
     /// <summary>
     /// POST /api/Sensores/lectura [MÓVIL]
     /// MÓDULO 5: Recibir lectura individual del WearOS (cada 10s)
-    /// Calcula el riesgo en ese instante vía el microservicio ML en lugar de guardar 0.0 fijo.
+    /// El riesgo (ProbabilidadPico) lo calcula el móvil en local con el motor F1-F3.
     /// </summary>
     [HttpPost("lectura")]
     public async Task<IActionResult> RecibirLectura([FromBody] LecturaSensorRequest request)
@@ -73,10 +77,9 @@ public class SensoresController : ControllerBase
         if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
 
         _logger.LogInformation("Receiving sensor reading for paciente: {PacienteId}", pacienteId);
-        var probabilidad = await CalcularRiesgoAsync(pacienteId, request.PulsoBpm, request.TemperaturaC, request.SudoracionGsr);
         var lectura = await _sensorService.InsertarLecturaAsync(
             pacienteId, "wearos-001", request.PulsoBpm, request.TemperaturaC,
-            request.SudoracionGsr, probabilidad);
+            request.SudoracionGsr, Math.Clamp(request.ProbabilidadPico ?? 0.0, 0.0, 1.0));
 
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -100,65 +103,294 @@ public class SensoresController : ControllerBase
         var count = 0;
         foreach (var lectura in request)
         {
-            var probabilidad = await CalcularRiesgoAsync(pacienteId, lectura.PulsoBpm, lectura.TemperaturaC, lectura.SudoracionGsr);
             await _sensorService.InsertarLecturaAsync(
                 pacienteId, "wearos-001", lectura.PulsoBpm, lectura.TemperaturaC,
-                lectura.SudoracionGsr, probabilidad);
+                lectura.SudoracionGsr, Math.Clamp(lectura.ProbabilidadPico ?? 0.0, 0.0, 1.0));
             count++;
         }
 
         return Ok(new { Procesadas = count, message = "Lote procesado" });
     }
 
+    // ── Reportes de pico glucémico (cálculo local del móvil) ──
+
     /// <summary>
-    /// Calcula el riesgo en el instante de la lectura llamando al microservicio ML.
-    /// Incluye el historial reciente para dar contexto al modelo (ventana deslizante).
-    /// Si ML no está configurado o no responde, la lectura se guarda con riesgo 0.0.
+    /// POST /api/Sensores/prediccion [MÓVIL]
+    /// Guarda el reporte calculado en local (IMC, z, P(Pico), caso clínico, acción).
+    /// El backend solo persiste; la web lo pinta.
     /// </summary>
-    private async Task<double> CalcularRiesgoAsync(string pacienteId, int pulsoBpm, double temperaturaC, double sudoracionGsr)
+    [HttpPost("prediccion")]
+    public async Task<IActionResult> GuardarReporte([FromBody] GuardarPrediccionRequest request)
     {
-        if (!_mlPredictionClient.IsConfigured)
+        var pacienteId = await ResolverPacienteIdAsync(request.PacienteId);
+        if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
+
+        _logger.LogInformation("Saving glycemic peak report for paciente: {PacienteId}, caso: {CasoClinico}", pacienteId, request.CasoClinico);
+        var entidad = new PrediccionMl
         {
-            _logger.LogWarning("ML service not configured; reading saved without risk for patient {PacienteId}", pacienteId);
-            return 0.0;
+            PacienteId = pacienteId,
+            ProbabilidadPico = Math.Clamp(request.ProbabilidadPico, 0.0, 1.0),
+            NivelRiesgo = request.NivelRiesgo,
+            HorasEstimadas = request.HorasEstimadas,
+            Recomendacion = request.Recomendacion ?? string.Empty,
+            ModeloVersion = string.IsNullOrWhiteSpace(request.ModeloVersion) ? "pico-v1.0" : request.ModeloVersion,
+            Imc = request.Imc,
+            Z = request.Z,
+            PPico = request.PPico,
+            CasoClinico = request.CasoClinico ?? string.Empty,
+            AccionAutomatizada = request.AccionAutomatizada ?? string.Empty,
+            FechaPrediccion = DateTime.UtcNow,
+            FechaExpiracion = DateTime.UtcNow.AddHours(2)
+        };
+
+        var guardada = await _mlService.GuardarPrediccionAsync(entidad);
+
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _auditoriaService.RegistrarAsync(usuarioId, "guardar_prediccion", "predicciones_ml", guardada.Id, ip);
+
+        return Ok(new { PrediccionId = guardada.Id, message = "Reporte guardado" });
+    }
+
+    /// <summary>
+    /// GET /api/Sensores/predicciones/{pacienteId} [WEB + MÓVIL]
+    /// Historial de reportes de pico glucémico.
+    /// </summary>
+    [HttpGet("predicciones/{pacienteId}")]
+    public async Task<IActionResult> ObtenerPredicciones(string pacienteId)
+    {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching predictions - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
+            return Forbid();
         }
+
+        _logger.LogInformation("Fetching predictions for paciente: {PacienteId}", pacienteId);
+        var predicciones = await _mlService.ObtenerPrediccionesAsync(pacienteId);
+        var response = predicciones.Select(p => new
+        {
+            p.Id,
+            p.PacienteId,
+            Probabilidad = p.ProbabilidadPico,
+            p.NivelRiesgo,
+            p.Recomendacion,
+            p.FechaPrediccion,
+            p.HorasEstimadas,
+            p.ModeloVersion,
+            p.Imc,
+            p.Z,
+            PPico = p.PPico,
+            p.CasoClinico,
+            p.AccionAutomatizada
+        });
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// GET /api/Sensores/predicciones/{pacienteId}/actual [WEB + MÓVIL]
+    /// Reporte vigente ("próximas 2 horas").
+    /// </summary>
+    [HttpGet("predicciones/{pacienteId}/actual")]
+    public async Task<IActionResult> PrediccionActual(string pacienteId)
+    {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching current prediction - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
+            return Forbid();
+        }
+
+        _logger.LogInformation("Fetching current prediction for paciente: {PacienteId}", pacienteId);
+        var prediccion = await _mlService.ObtenerPrediccionActualAsync(pacienteId);
+        if (prediccion == null)
+        {
+            _logger.LogWarning("No active prediction for patient {PacienteId}", pacienteId);
+            return Ok(new { message = "Sin predicción activa" });
+        }
+        return Ok(new
+        {
+            prediccion.Id,
+            prediccion.PacienteId,
+            Probabilidad = prediccion.ProbabilidadPico,
+            prediccion.NivelRiesgo,
+            prediccion.Recomendacion,
+            prediccion.FechaPrediccion,
+            prediccion.HorasEstimadas,
+            prediccion.ModeloVersion,
+            prediccion.Imc,
+            prediccion.Z,
+            PPico = prediccion.PPico,
+            prediccion.CasoClinico,
+            prediccion.AccionAutomatizada
+        });
+    }
+
+    // ── Predicciones ML (Guardar reportes) ────────────────────────
+
+    /// <summary>
+    /// POST /api/Sensores/prediccion [MÓVIL]
+    /// MÓDULO 5: Guardar reporte de predicción ML local (F1-F3 motor)
+    /// El móvil calcula localmente: IMC, z-score, P(Pico), clasificación de riesgo
+    /// Este endpoint persiste el reporte para historial y web
+    /// </summary>
+    [HttpPost("prediccion")]
+    public async Task<IActionResult> GuardarPrediccion([FromBody] GuardarPrediccionRequest request)
+    {
+        var pacienteId = await ResolverPacienteIdAsync(request.PacienteId);
+        if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
+
+        _logger.LogInformation(
+            "Saving ML prediction for paciente: {PacienteId}, P(Pico)={PPico}, NivelRiesgo={NivelRiesgo}, CasoClinico={CasoClinico}",
+            pacienteId, request.ProbabilidadPico, request.NivelRiesgo, request.CasoClinico);
 
         try
         {
-            var historial = await _sensorService.ObtenerLecturasAsync(pacienteId, limite: 100) ?? new List<LecturaSensor>();
-            var lecturasParaMl = new List<LecturaSensor>(historial)
+            var prediccion = new PrediccionMl
             {
-                new()
-                {
-                    Meta = new MetaData { PacienteId = pacienteId },
-                    Timestamp = DateTime.UtcNow,
-                    PulsoBpm = pulsoBpm,
-                    TemperaturaC = temperaturaC,
-                    SudoracionGsr = sudoracionGsr
-                }
+                PacienteId = pacienteId,
+                ProbabilidadPico = Math.Clamp(request.ProbabilidadPico, 0.0, 1.0),
+                NivelRiesgo = request.NivelRiesgo ?? "Normal",
+                CasoClinico = request.CasoClinico,
+                Imc = request.Imc,
+                Z = request.Z,
+                PPico = request.PPico,
+                Recomendacion = request.Recomendacion ?? request.AccionAutomatizada,
+                AccionAutomatizada = request.AccionAutomatizada,
+                ModeloVersion = request.ModeloVersion ?? "pico-v1.0",
+                FechaPrediccion = DateTime.UtcNow,
+                FechaExpiracion = DateTime.UtcNow.AddHours(6)
             };
 
-            var prediccion = await _mlPredictionClient.PredecirAsync(pacienteId, lecturasParaMl);
-            if (prediccion == null)
-            {
-                _logger.LogWarning("ML service unavailable; reading saved without risk for patient {PacienteId}", pacienteId);
-                return 0.0;
-            }
+            await _db.PrediccionesMl.InsertOneAsync(prediccion);
 
-            var probabilidad = Math.Clamp(prediccion.ProbabilidadPico, 0.0, 1.0);
-            _logger.LogInformation("ML risk {Probabilidad:P0} ({NivelRiesgo}) for reading of patient {PacienteId}",
-                probabilidad, prediccion.NivelRiesgo, pacienteId);
-            return probabilidad;
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "ML service not ready; reading saved without risk for patient {PacienteId}", pacienteId);
-            return 0.0;
+            var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            await _auditoriaService.RegistrarAsync(usuarioId, "guardar_prediccion_ml", "predicciones_ml", prediccion.Id, ip);
+
+            // Disparar notificación si es crítica
+            _ = Task.Run(async () => await _notificacionService.NotificarPrediccionCriticaAsync(prediccion));
+
+            return Ok(new { PrediccionId = prediccion.Id, message = "Predicción guardada correctamente" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error calling ML service for patient {PacienteId}; reading saved without risk", pacienteId);
-            return 0.0;
+            _logger.LogError(ex, "Error saving ML prediction for paciente {PacienteId}", pacienteId);
+            return StatusCode(500, new { message = "Error al guardar predicción: " + ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// GET /api/Sensores/predicciones/{pacienteId} [WEB + MÓVIL]
+    /// MÓDULO 5: Historial de predicciones ML del paciente
+    /// </summary>
+    [HttpGet("predicciones/{pacienteId}")]
+    public async Task<IActionResult> ObtenerPredicciones(string pacienteId, [FromQuery] int limite = 50)
+    {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching predictions - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
+            return Forbid();
+        }
+
+        _logger.LogInformation("Fetching {Limite} predictions for paciente: {PacienteId}", limite, pacienteId);
+
+        try
+        {
+            var predicciones = await _db.PrediccionesMl
+                .Find(p => p.PacienteId == pacienteId)
+                .SortByDescending(p => p.FechaPrediccion)
+                .Limit(limite)
+                .ToListAsync();
+
+            var response = predicciones.Select(p => new
+            {
+                p.Id,
+                p.PacienteId,
+                p.ProbabilidadPico,
+                p.NivelRiesgo,
+                p.CasoClinico,
+                p.Imc,
+                p.Z,
+                p.PPico,
+                p.Recomendacion,
+                p.AccionAutomatizada,
+                p.ModeloVersion,
+                p.FechaPrediccion
+            });
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching predictions for paciente {PacienteId}", pacienteId);
+            return StatusCode(500, new { message = "Error al obtener predicciones: " + ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// GET /api/Sensores/predicciones/{pacienteId}/actual [WEB + MÓVIL]
+    /// MÓDULO 5: Última predicción ML del paciente
+    /// </summary>
+    [HttpGet("predicciones/{pacienteId}/actual")]
+    public async Task<IActionResult> ObtenerPrediccionActual(string pacienteId)
+    {
+        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
+
+        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
+        {
+            _logger.LogWarning("Ownership check failed fetching current prediction - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
+            return Forbid();
+        }
+
+        _logger.LogInformation("Fetching current prediction for paciente: {PacienteId}", pacienteId);
+
+        try
+        {
+            var prediccion = await _db.PrediccionesMl
+                .Find(p => p.PacienteId == pacienteId)
+                .SortByDescending(p => p.FechaPrediccion)
+                .FirstOrDefaultAsync();
+
+            if (prediccion == null)
+            {
+                return Ok(new { message = "Sin predicciones disponibles" });
+            }
+
+            var response = new
+            {
+                prediccion.Id,
+                prediccion.PacienteId,
+                prediccion.ProbabilidadPico,
+                prediccion.NivelRiesgo,
+                prediccion.CasoClinico,
+                prediccion.Imc,
+                prediccion.Z,
+                prediccion.PPico,
+                prediccion.Recomendacion,
+                prediccion.AccionAutomatizada,
+                prediccion.ModeloVersion,
+                prediccion.FechaPrediccion
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching current prediction for paciente {PacienteId}", pacienteId);
+            return StatusCode(500, new { message = "Error al obtener predicción: " + ex.Message });
         }
     }
 
@@ -541,3 +773,17 @@ public record CrearEventoRequest(
     double? ProbabilidadMl = null,
     string? PacienteId = null,
     string? DispositivoMac = null);
+
+public record GuardarPrediccionRequest(
+    [Required] string PacienteId,
+    [Range(0.0, 1.0)] double ProbabilidadPico,
+    string NivelRiesgo,
+    string? CasoClinico = null,
+    string? AccionAutomatizada = null,
+    double? Imc = null,
+    double? Z = null,
+    [Range(0.0, 1.0)] double? PPico = null,
+    string? Recomendacion = null,
+    int? HorasEstimadas = null,
+    string? ModeloVersion = null);
+

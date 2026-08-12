@@ -34,7 +34,6 @@ public class MongoDbContext : IMongoDbContext
     public virtual IMongoCollection<Auditoria> Auditoria => _database.GetCollection<Auditoria>("auditoria");
     public virtual IMongoCollection<Pago> Pagos => _database.GetCollection<Pago>("pagos");
     public virtual IMongoCollection<PrediccionMl> PrediccionesMl => _database.GetCollection<PrediccionMl>("predicciones_ml");
-    public virtual IMongoCollection<ModeloMl> ModelosMl => _database.GetCollection<ModeloMl>("modelos_ml");
     public virtual IMongoCollection<FcmToken> FcmTokens => _database.GetCollection<FcmToken>("fcm_tokens");
     public virtual IMongoCollection<RefreshToken> RefreshTokens => _database.GetCollection<RefreshToken>("refresh_tokens");
     public virtual IMongoCollection<Medicamento> Medicamentos => _database.GetCollection<Medicamento>("medicamentos");
@@ -43,6 +42,7 @@ public class MongoDbContext : IMongoDbContext
     public virtual IMongoCollection<DeviceSession> DeviceSessions => _database.GetCollection<DeviceSession>("device_sessions");
     public virtual IMongoCollection<ReporteCompartido> ReportesCompartidos => _database.GetCollection<ReporteCompartido>("reportes_compartidos");
     public virtual IMongoCollection<TicketSoporte> TicketsSoporte => _database.GetCollection<TicketSoporte>("tickets_soporte");
+    public virtual IMongoCollection<NotificacionMlEvento> NotificacionesMlEventos => _database.GetCollection<NotificacionMlEvento>("notificaciones_ml_eventos");
 
     public virtual async Task<T?> FindFirstOrDefaultAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter)
     {
