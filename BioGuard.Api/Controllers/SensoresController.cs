@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -149,6 +149,9 @@ public class SensoresController : ControllerBase
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         await _auditoriaService.RegistrarAsync(usuarioId, "guardar_prediccion", "predicciones_ml", guardada.Id, ip);
 
+        // Disparar notificación push si la predicción es crítica (P(Pico) >= 0.75 o riesgo Crítico/Alto)
+        _ = Task.Run(async () => await _notificacionService.NotificarPrediccionCriticaAsync(guardada));
+
         return Ok(new { PrediccionId = guardada.Id, message = "Reporte guardado" });
     }
 
@@ -230,168 +233,6 @@ public class SensoresController : ControllerBase
             prediccion.CasoClinico,
             prediccion.AccionAutomatizada
         });
-    }
-
-    // ── Predicciones ML (Guardar reportes) ────────────────────────
-
-    /// <summary>
-    /// POST /api/Sensores/prediccion [MÓVIL]
-    /// MÓDULO 5: Guardar reporte de predicción ML local (F1-F3 motor)
-    /// El móvil calcula localmente: IMC, z-score, P(Pico), clasificación de riesgo
-    /// Este endpoint persiste el reporte para historial y web
-    /// </summary>
-    [HttpPost("prediccion")]
-    public async Task<IActionResult> GuardarPrediccion([FromBody] GuardarPrediccionRequest request)
-    {
-        var pacienteId = await ResolverPacienteIdAsync(request.PacienteId);
-        if (string.IsNullOrEmpty(pacienteId)) return Unauthorized();
-
-        _logger.LogInformation(
-            "Saving ML prediction for paciente: {PacienteId}, P(Pico)={PPico}, NivelRiesgo={NivelRiesgo}, CasoClinico={CasoClinico}",
-            pacienteId, request.ProbabilidadPico, request.NivelRiesgo, request.CasoClinico);
-
-        try
-        {
-            var prediccion = new PrediccionMl
-            {
-                PacienteId = pacienteId,
-                ProbabilidadPico = Math.Clamp(request.ProbabilidadPico, 0.0, 1.0),
-                NivelRiesgo = request.NivelRiesgo ?? "Normal",
-                CasoClinico = request.CasoClinico,
-                Imc = request.Imc,
-                Z = request.Z,
-                PPico = request.PPico,
-                Recomendacion = request.Recomendacion ?? request.AccionAutomatizada,
-                AccionAutomatizada = request.AccionAutomatizada,
-                ModeloVersion = request.ModeloVersion ?? "pico-v1.0",
-                FechaPrediccion = DateTime.UtcNow,
-                FechaExpiracion = DateTime.UtcNow.AddHours(6)
-            };
-
-            await _db.PrediccionesMl.InsertOneAsync(prediccion);
-
-            var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
-            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            await _auditoriaService.RegistrarAsync(usuarioId, "guardar_prediccion_ml", "predicciones_ml", prediccion.Id, ip);
-
-            // Disparar notificación si es crítica
-            _ = Task.Run(async () => await _notificacionService.NotificarPrediccionCriticaAsync(prediccion));
-
-            return Ok(new { PrediccionId = prediccion.Id, message = "Predicción guardada correctamente" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving ML prediction for paciente {PacienteId}", pacienteId);
-            return StatusCode(500, new { message = "Error al guardar predicción: " + ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// GET /api/Sensores/predicciones/{pacienteId} [WEB + MÓVIL]
-    /// MÓDULO 5: Historial de predicciones ML del paciente
-    /// </summary>
-    [HttpGet("predicciones/{pacienteId}")]
-    public async Task<IActionResult> ObtenerPredicciones(string pacienteId, [FromQuery] int limite = 50)
-    {
-        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var role = User.FindFirst(ClaimTypes.Role)?.Value;
-        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
-
-        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
-        {
-            _logger.LogWarning("Ownership check failed fetching predictions - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
-            return Forbid();
-        }
-
-        _logger.LogInformation("Fetching {Limite} predictions for paciente: {PacienteId}", limite, pacienteId);
-
-        try
-        {
-            var predicciones = await _db.PrediccionesMl
-                .Find(p => p.PacienteId == pacienteId)
-                .SortByDescending(p => p.FechaPrediccion)
-                .Limit(limite)
-                .ToListAsync();
-
-            var response = predicciones.Select(p => new
-            {
-                p.Id,
-                p.PacienteId,
-                p.ProbabilidadPico,
-                p.NivelRiesgo,
-                p.CasoClinico,
-                p.Imc,
-                p.Z,
-                p.PPico,
-                p.Recomendacion,
-                p.AccionAutomatizada,
-                p.ModeloVersion,
-                p.FechaPrediccion
-            });
-
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching predictions for paciente {PacienteId}", pacienteId);
-            return StatusCode(500, new { message = "Error al obtener predicciones: " + ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// GET /api/Sensores/predicciones/{pacienteId}/actual [WEB + MÓVIL]
-    /// MÓDULO 5: Última predicción ML del paciente
-    /// </summary>
-    [HttpGet("predicciones/{pacienteId}/actual")]
-    public async Task<IActionResult> ObtenerPrediccionActual(string pacienteId)
-    {
-        var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var role = User.FindFirst(ClaimTypes.Role)?.Value;
-        if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
-
-        if (!await _ownershipHelper.VerifyPacienteOwnershipAsync(pacienteId, usuarioId, role!))
-        {
-            _logger.LogWarning("Ownership check failed fetching current prediction - user: {UserId}, paciente: {PacienteId}", usuarioId, pacienteId);
-            return Forbid();
-        }
-
-        _logger.LogInformation("Fetching current prediction for paciente: {PacienteId}", pacienteId);
-
-        try
-        {
-            var prediccion = await _db.PrediccionesMl
-                .Find(p => p.PacienteId == pacienteId)
-                .SortByDescending(p => p.FechaPrediccion)
-                .FirstOrDefaultAsync();
-
-            if (prediccion == null)
-            {
-                return Ok(new { message = "Sin predicciones disponibles" });
-            }
-
-            var response = new
-            {
-                prediccion.Id,
-                prediccion.PacienteId,
-                prediccion.ProbabilidadPico,
-                prediccion.NivelRiesgo,
-                prediccion.CasoClinico,
-                prediccion.Imc,
-                prediccion.Z,
-                prediccion.PPico,
-                prediccion.Recomendacion,
-                prediccion.AccionAutomatizada,
-                prediccion.ModeloVersion,
-                prediccion.FechaPrediccion
-            };
-
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching current prediction for paciente {PacienteId}", pacienteId);
-            return StatusCode(500, new { message = "Error al obtener predicción: " + ex.Message });
-        }
     }
 
     // ── Lecturas (Consulta) ───────────────────────────────────

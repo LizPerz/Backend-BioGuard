@@ -7,6 +7,8 @@ using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Models;
+using CrearEventoRequest = BioGuard.Api.Controllers.CrearEventoRequest;
+using GuardarPrediccionRequest = BioGuard.Api.Controllers.GuardarPrediccionRequest;
 
 namespace Test1BioGuard.IntegrationTests;
 
@@ -742,28 +744,26 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
              new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
                  TestTokenHelper.GeneratePacienteToken(pacienteId));
 
-         var request = new GuardarPrediccionRequest
-         {
-             ProbabilidadPico = 0.85,
-             NivelRiesgo = "Crítico Alto",
-             CasoClinico = "Hipoglucemia Nocturna",
-             Imc = 24.5,
-             Z = 2.3,
-             Recomendacion = "Consumir carbohidratos rápidos"
-         };
+         var request = new GuardarPrediccionRequest(
+             PacienteId: pacienteId,
+             ProbabilidadPico: 0.85,
+             NivelRiesgo: "Crítico Alto",
+             CasoClinico: "Hipoglucemia Nocturna",
+             Imc: 24.5,
+             Z: 2.3,
+             Recomendacion: "Consumir carbohidratos rápidos");
 
          var response = await _client.PostAsJsonAsync($"/api/Sensores/prediccion", request);
 
          response.StatusCode.Should().Be(HttpStatusCode.OK);
          var json = await response.Content.ReadAsStringAsync();
-         json.Should().Contain("Predicción guardada correctamente");
+         json.Should().Contain("Reporte guardado");
      }
 
      [Fact]
      public async Task ObtenerPredicciones_ConHistorial_Retorna200()
      {
          var pacienteId = "123456789012345678901234";
-         var mockPredicciones = new Mock<IMongoCollection<PrediccionMl>>();
 
          var prediccionesData = new List<PrediccionMl>
          {
@@ -787,19 +787,13 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
              }
          };
 
-         _mockDb.Setup(db => db.PrediccionesMl).Returns(mockPredicciones.Object);
-
-         var mockAsyncCursor = new Mock<IAsyncCursor<PrediccionMl>>();
-         mockAsyncCursor.SetupSequence(c => c.MoveNextAsync(It.IsAny<CancellationToken>()))
-             .ReturnsAsync(true)
-             .ReturnsAsync(false);
-         mockAsyncCursor.Setup(c => c.Current).Returns(prediccionesData);
-
-         mockPredicciones.Setup(c => c.FindAsync(
+         _mockDb.Setup(db => db.FindToListAsync(
+                 It.IsAny<IMongoCollection<PrediccionMl>>(),
                  It.IsAny<FilterDefinition<PrediccionMl>>(),
-                 It.IsAny<FindOptions<PrediccionMl>>(),
-                 It.IsAny<CancellationToken>()))
-             .ReturnsAsync(mockAsyncCursor.Object);
+                 It.IsAny<SortDefinition<PrediccionMl>>(),
+                 It.IsAny<int?>(),
+                 It.IsAny<int?>()))
+             .ReturnsAsync(prediccionesData);
 
          _client.DefaultRequestHeaders.Authorization =
              new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
@@ -808,6 +802,9 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
          var response = await _client.GetAsync($"/api/Sensores/predicciones/{pacienteId}");
 
          response.StatusCode.Should().Be(HttpStatusCode.OK);
+         var json = await response.Content.ReadAsStringAsync();
+         var doc = JsonDocument.Parse(json);
+         doc.RootElement.GetArrayLength().Should().Be(2);
      }
 
      [Fact]
@@ -878,15 +875,14 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
              new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
                  TestTokenHelper.GeneratePacienteToken(pacienteId));
 
-         var request = new GuardarPrediccionRequest
-         {
-             ProbabilidadPico = 0.95, // Mayor a 0.75 = crítica
-             NivelRiesgo = "Crítico Alto",
-             CasoClinico = "Hipoglucemia Nocturna",
-             Imc = 22.0,
-             Z = 3.0,
-             Recomendacion = "Alerta crítica: consumir glucosa"
-         };
+         var request = new GuardarPrediccionRequest(
+             PacienteId: pacienteId,
+             ProbabilidadPico: 0.95, // Mayor a 0.75 = crítica
+             NivelRiesgo: "Crítico Alto",
+             CasoClinico: "Hipoglucemia Nocturna",
+             Imc: 22.0,
+             Z: 3.0,
+             Recomendacion: "Alerta crítica: consumir glucosa");
 
          var response = await _client.PostAsJsonAsync($"/api/Sensores/prediccion", request);
 
