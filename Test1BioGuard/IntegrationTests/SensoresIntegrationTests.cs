@@ -7,7 +7,6 @@ using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.DTOs;
 using BioGuard.Api.Models;
-using BioGuard.Api.Controllers;
 
 namespace Test1BioGuard.IntegrationTests;
 
@@ -720,6 +719,184 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var csv = await response.Content.ReadAsStringAsync();
         csv.Should().Contain("Timestamp,PulsoBpm,TemperaturaC,SudoracionGsr,ProbabilidadPico");
-        csv.Should().Contain("75");
-    }
-}
+         csv.Should().Contain("75");
+     }
+
+     [Fact]
+     public async Task GuardarPrediccion_ConDatosValidos_Retorna200()
+     {
+         var pacienteId = "123456789012345678901234";
+         var mockPredicciones = new Mock<IMongoCollection<PrediccionMl>>();
+         var mockNotificaciones = new Mock<IMongoCollection<NotificacionMlEvento>>();
+
+         _mockDb.Setup(db => db.PrediccionesMl).Returns(mockPredicciones.Object);
+         _mockDb.Setup(db => db.NotificacionesMlEventos).Returns(mockNotificaciones.Object);
+
+         mockPredicciones.Setup(c => c.InsertOneAsync(
+                 It.IsAny<PrediccionMl>(),
+                 It.IsAny<InsertOneOptions>(),
+                 It.IsAny<CancellationToken>()))
+             .Returns(Task.CompletedTask);
+
+         _client.DefaultRequestHeaders.Authorization =
+             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                 TestTokenHelper.GeneratePacienteToken(pacienteId));
+
+         var request = new GuardarPrediccionRequest
+         {
+             ProbabilidadPico = 0.85,
+             NivelRiesgo = "Crítico Alto",
+             CasoClinico = "Hipoglucemia Nocturna",
+             Imc = 24.5,
+             Z = 2.3,
+             Recomendacion = "Consumir carbohidratos rápidos"
+         };
+
+         var response = await _client.PostAsJsonAsync($"/api/Sensores/prediccion", request);
+
+         response.StatusCode.Should().Be(HttpStatusCode.OK);
+         var json = await response.Content.ReadAsStringAsync();
+         json.Should().Contain("Predicción guardada correctamente");
+     }
+
+     [Fact]
+     public async Task ObtenerPredicciones_ConHistorial_Retorna200()
+     {
+         var pacienteId = "123456789012345678901234";
+         var mockPredicciones = new Mock<IMongoCollection<PrediccionMl>>();
+
+         var prediccionesData = new List<PrediccionMl>
+         {
+             new()
+             {
+                 Id = "pred1",
+                 PacienteId = pacienteId,
+                 ProbabilidadPico = 0.75,
+                 NivelRiesgo = "Crítico Alto",
+                 CasoClinico = "Hipoglucemia Nocturna",
+                 FechaPrediccion = DateTime.UtcNow.AddHours(-1)
+             },
+             new()
+             {
+                 Id = "pred2",
+                 PacienteId = pacienteId,
+                 ProbabilidadPico = 0.45,
+                 NivelRiesgo = "Bajo",
+                 CasoClinico = "Óptimo",
+                 FechaPrediccion = DateTime.UtcNow.AddHours(-2)
+             }
+         };
+
+         _mockDb.Setup(db => db.PrediccionesMl).Returns(mockPredicciones.Object);
+
+         var mockAsyncCursor = new Mock<IAsyncCursor<PrediccionMl>>();
+         mockAsyncCursor.SetupSequence(c => c.MoveNextAsync(It.IsAny<CancellationToken>()))
+             .ReturnsAsync(true)
+             .ReturnsAsync(false);
+         mockAsyncCursor.Setup(c => c.Current).Returns(prediccionesData);
+
+         mockPredicciones.Setup(c => c.FindAsync(
+                 It.IsAny<FilterDefinition<PrediccionMl>>(),
+                 It.IsAny<FindOptions<PrediccionMl>>(),
+                 It.IsAny<CancellationToken>()))
+             .ReturnsAsync(mockAsyncCursor.Object);
+
+         _client.DefaultRequestHeaders.Authorization =
+             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                 TestTokenHelper.GeneratePacienteToken(pacienteId));
+
+         var response = await _client.GetAsync($"/api/Sensores/predicciones/{pacienteId}");
+
+         response.StatusCode.Should().Be(HttpStatusCode.OK);
+     }
+
+     [Fact]
+     public async Task ObtenerPrediccionActual_ConDatos_Retorna200()
+     {
+         var pacienteId = "123456789012345678901234";
+         var mockPredicciones = new Mock<IMongoCollection<PrediccionMl>>();
+
+         var prediccion = new PrediccionMl
+         {
+             Id = "pred1",
+             PacienteId = pacienteId,
+             ProbabilidadPico = 0.82,
+             NivelRiesgo = "Moderado Alto",
+             CasoClinico = "Hiperglucemia Severa",
+             Imc = 26.0,
+             Z = 1.8,
+             Recomendacion = "Monitorear ingesta de carbohidratos",
+             FechaPrediccion = DateTime.UtcNow
+         };
+
+         _mockDb.Setup(db => db.PrediccionesMl).Returns(mockPredicciones.Object);
+
+         var mockAsyncCursor = new Mock<IAsyncCursor<PrediccionMl>>();
+         mockAsyncCursor.SetupSequence(c => c.MoveNextAsync(It.IsAny<CancellationToken>()))
+             .ReturnsAsync(true)
+             .ReturnsAsync(false);
+         mockAsyncCursor.Setup(c => c.Current).Returns(new List<PrediccionMl> { prediccion });
+
+         mockPredicciones.Setup(c => c.FindAsync(
+                 It.IsAny<FilterDefinition<PrediccionMl>>(),
+                 It.IsAny<FindOptions<PrediccionMl>>(),
+                 It.IsAny<CancellationToken>()))
+             .ReturnsAsync(mockAsyncCursor.Object);
+
+         _client.DefaultRequestHeaders.Authorization =
+             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                 TestTokenHelper.GeneratePacienteToken(pacienteId));
+
+         var response = await _client.GetAsync($"/api/Sensores/predicciones/{pacienteId}/actual");
+
+         response.StatusCode.Should().Be(HttpStatusCode.OK);
+     }
+
+     [Fact]
+     public async Task PrediccionCritica_TriggeraNotificacion()
+     {
+         var pacienteId = "123456789012345678901234";
+         var mockPredicciones = new Mock<IMongoCollection<PrediccionMl>>();
+         var mockNotificaciones = new Mock<IMongoCollection<NotificacionMlEvento>>();
+
+         _mockDb.Setup(db => db.PrediccionesMl).Returns(mockPredicciones.Object);
+         _mockDb.Setup(db => db.NotificacionesMlEventos).Returns(mockNotificaciones.Object);
+
+         mockPredicciones.Setup(c => c.InsertOneAsync(
+                 It.IsAny<PrediccionMl>(),
+                 It.IsAny<InsertOneOptions>(),
+                 It.IsAny<CancellationToken>()))
+             .Returns(Task.CompletedTask);
+
+         mockNotificaciones.Setup(c => c.InsertOneAsync(
+                 It.IsAny<NotificacionMlEvento>(),
+                 It.IsAny<InsertOneOptions>(),
+                 It.IsAny<CancellationToken>()))
+             .Returns(Task.CompletedTask);
+
+         _client.DefaultRequestHeaders.Authorization =
+             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+                 TestTokenHelper.GeneratePacienteToken(pacienteId));
+
+         var request = new GuardarPrediccionRequest
+         {
+             ProbabilidadPico = 0.95, // Mayor a 0.75 = crítica
+             NivelRiesgo = "Crítico Alto",
+             CasoClinico = "Hipoglucemia Nocturna",
+             Imc = 22.0,
+             Z = 3.0,
+             Recomendacion = "Alerta crítica: consumir glucosa"
+         };
+
+         var response = await _client.PostAsJsonAsync($"/api/Sensores/prediccion", request);
+
+         response.StatusCode.Should().Be(HttpStatusCode.OK);
+         // Verify notificación fue disparada
+         mockNotificaciones.Verify(
+             c => c.InsertOneAsync(
+                 It.IsAny<NotificacionMlEvento>(),
+                 It.IsAny<InsertOneOptions>(),
+                 It.IsAny<CancellationToken>()),
+             Times.AtLeastOnce);
+     }
+ }
