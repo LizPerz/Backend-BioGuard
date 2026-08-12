@@ -42,6 +42,7 @@ public class MongoDbContext : IMongoDbContext
     public virtual IMongoCollection<DeviceSession> DeviceSessions => _database.GetCollection<DeviceSession>("device_sessions");
     public virtual IMongoCollection<ReporteCompartido> ReportesCompartidos => _database.GetCollection<ReporteCompartido>("reportes_compartidos");
     public virtual IMongoCollection<TicketSoporte> TicketsSoporte => _database.GetCollection<TicketSoporte>("tickets_soporte");
+    public virtual IMongoCollection<NotificacionMlEvento> NotificacionesMlEventos => _database.GetCollection<NotificacionMlEvento>("notificaciones_ml_eventos");
 
     public virtual async Task<T?> FindFirstOrDefaultAsync<T>(IMongoCollection<T> collection, Expression<Func<T, bool>> filter)
     {

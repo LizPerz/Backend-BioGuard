@@ -24,16 +24,18 @@ public class SensoresController : ControllerBase
     private readonly IMongoDbContext _db;
     private readonly AuditoriaService _auditoriaService;
     private readonly MLService _mlService;
+    private readonly INotificacionMlService _notificacionService;
     private readonly ILogger<SensoresController> _logger;
     private readonly OwnershipHelper _ownershipHelper;
 
-    public SensoresController(SensorService sensorService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, MLService mlService, ILogger<SensoresController> logger, OwnershipHelper ownershipHelper)
+    public SensoresController(SensorService sensorService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, MLService mlService, INotificacionMlService notificacionService, ILogger<SensoresController> logger, OwnershipHelper ownershipHelper)
     {
         _sensorService = sensorService;
         _pacienteService = pacienteService;
         _db = db;
         _auditoriaService = auditoriaService;
         _mlService = mlService;
+        _notificacionService = notificacionService;
         _logger = logger;
         _ownershipHelper = ownershipHelper;
     }
@@ -270,6 +272,9 @@ public class SensoresController : ControllerBase
             var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             await _auditoriaService.RegistrarAsync(usuarioId, "guardar_prediccion_ml", "predicciones_ml", prediccion.Id, ip);
+
+            // Disparar notificación si es crítica
+            _ = Task.Run(async () => await _notificacionService.NotificarPrediccionCriticaAsync(prediccion));
 
             return Ok(new { PrediccionId = prediccion.Id, message = "Predicción guardada correctamente" });
         }
