@@ -18,7 +18,7 @@ public class MLService
 
     public async Task<List<PrediccionMl>> ObtenerPrediccionesAsync(string pacienteId)
     {
-        _logger.LogInformation("Obteniendo predicciones ML para paciente {PacienteId}", pacienteId);
+        _logger.LogInformation("Obteniendo reportes de pico glucémico para paciente {PacienteId}", pacienteId);
         var filter = Builders<PrediccionMl>.Filter.Eq(p => p.PacienteId, pacienteId);
         var sort = Builders<PrediccionMl>.Sort.Descending(p => p.FechaPrediccion);
         return await _db.FindToListAsync(_db.PrediccionesMl, filter, sort, 20);
@@ -26,7 +26,7 @@ public class MLService
 
     public async Task<PrediccionMl?> ObtenerPrediccionActualAsync(string pacienteId)
     {
-        _logger.LogInformation("Obteniendo predicción actual para paciente {PacienteId}", pacienteId);
+        _logger.LogInformation("Obteniendo reporte actual para paciente {PacienteId}", pacienteId);
         var filter = Builders<PrediccionMl>.Filter.And(
             Builders<PrediccionMl>.Filter.Eq(p => p.PacienteId, pacienteId),
             Builders<PrediccionMl>.Filter.Gt(p => p.FechaExpiracion, DateTime.UtcNow));
@@ -36,11 +36,11 @@ public class MLService
 
     public async Task<List<string>> ObtenerRecomendacionesAsync(string pacienteId)
     {
-        _logger.LogInformation("Obteniendo recomendaciones ML para paciente {PacienteId}", pacienteId);
+        _logger.LogInformation("Obteniendo recomendaciones para paciente {PacienteId}", pacienteId);
         var prediccion = await ObtenerPrediccionActualAsync(pacienteId);
         if (prediccion == null)
         {
-            _logger.LogWarning("No hay predicción activa para paciente {PacienteId}", pacienteId);
+            _logger.LogWarning("No hay reporte activo para paciente {PacienteId}", pacienteId);
             return new List<string>();
         }
 
@@ -60,51 +60,14 @@ public class MLService
         return recomendaciones;
     }
 
-    public async Task<PrediccionMl> GuardarPrediccionAsync(MLPredictionResponseDto prediccion)
+    public async Task<PrediccionMl> GuardarPrediccionAsync(PrediccionMl entidad)
     {
-        var entidad = new PrediccionMl
-        {
-            PacienteId = prediccion.PacienteId,
-            ProbabilidadPico = prediccion.ProbabilidadPico,
-            NivelRiesgo = prediccion.NivelRiesgo,
-            HorasEstimadas = prediccion.HorasEstimadas,
-            Recomendacion = prediccion.Recomendacion,
-            ModeloVersion = prediccion.ModeloVersion,
-            FechaPrediccion = prediccion.FechaPrediccion,
-            FechaExpiracion = prediccion.FechaExpiracion
-        };
+        if (entidad.FechaPrediccion == default)
+            entidad.FechaPrediccion = DateTime.UtcNow;
 
-        _logger.LogInformation("Guardando predicción ML para paciente {PacienteId}", entidad.PacienteId);
+        _logger.LogInformation("Guardando reporte de pico glucémico para paciente {PacienteId}", entidad.PacienteId);
         await _db.PrediccionesMl.InsertOneAsync(entidad);
-        _logger.LogInformation("Predicción ML guardada con ID {PrediccionId}", entidad.Id);
+        _logger.LogInformation("Reporte guardado con ID {PrediccionId}", entidad.Id);
         return entidad;
-    }
-
-    public async Task<List<ModeloMl>> ObtenerModelosAsync()
-    {
-        _logger.LogInformation("Obteniendo modelos ML");
-        var filter = Builders<ModeloMl>.Filter.Empty;
-        var sort = Builders<ModeloMl>.Sort.Descending(m => m.FechaEntrenamiento);
-        return await _db.FindToListAsync(_db.ModelosMl, filter, sort);
-    }
-
-    public async Task<ModeloMl?> ObtenerModeloActivoAsync()
-    {
-        _logger.LogInformation("Buscando modelo ML activo");
-        return await _db.FindFirstOrDefaultAsync(_db.ModelosMl, m => m.Activo);
-    }
-
-    public async Task<ModeloMl> CrearModeloAsync(ModeloMl modelo)
-    {
-        _logger.LogInformation("Creando modelo ML v{Version}", modelo.Version);
-        await _db.ModelosMl.InsertOneAsync(modelo);
-        _logger.LogInformation("Modelo ML creado con ID {ModeloId}", modelo.Id);
-        return modelo;
-    }
-
-    public async Task<ModeloMl?> ObtenerMetricasAsync(string modeloId)
-    {
-        _logger.LogInformation("Obteniendo métricas del modelo {ModeloId}", modeloId);
-        return await _db.FindFirstOrDefaultAsync(_db.ModelosMl, m => m.Id == modeloId);
     }
 }

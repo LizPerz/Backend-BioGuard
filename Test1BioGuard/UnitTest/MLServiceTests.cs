@@ -13,16 +13,13 @@ public class MLServiceTests
     private readonly Mock<IMongoDbContext> _mockDb;
     private readonly MLService _service;
     private readonly Mock<IMongoCollection<PrediccionMl>> _mockPredicciones;
-    private readonly Mock<IMongoCollection<ModeloMl>> _mockModelos;
 
     public MLServiceTests()
     {
         _mockDb = new Mock<IMongoDbContext>();
         _mockPredicciones = new Mock<IMongoCollection<PrediccionMl>>();
-        _mockModelos = new Mock<IMongoCollection<ModeloMl>>();
 
         _mockDb.Setup(db => db.PrediccionesMl).Returns(_mockPredicciones.Object);
-        _mockDb.Setup(db => db.ModelosMl).Returns(_mockModelos.Object);
 
         var mockLogger = new Mock<ILogger<MLService>>();
         _service = new MLService(_mockDb.Object, mockLogger.Object);
@@ -95,39 +92,21 @@ public class MLServiceTests
     }
 
     [Fact]
-    public async Task CrearModeloAsync_ModeloValido_RetornaModelo()
+    public async Task GuardarPrediccionAsync_EntidadValida_GuardaYRetornaEntidad()
     {
-        var modelo = new ModeloMl
-        {
-            Version = "1.0.0",
-            Descripcion = "Modelo inicial"
-        };
-
-        _mockModelos.Setup(c => c.InsertOneAsync(
-            It.IsAny<ModeloMl>(),
-            It.IsAny<InsertOneOptions>(),
-            It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        var result = await _service.CrearModeloAsync(modelo);
-
-        result.Should().NotBeNull();
-        result.Version.Should().Be("1.0.0");
-        result.Accuracy.Should().Be(0);
-        result.Activo.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task GuardarPrediccionAsync_RespuestaValida_GuardaYRetornaEntidad()
-    {
-        var respuesta = new MLPredictionResponseDto
+        var entidad = new PrediccionMl
         {
             PacienteId = "123456789012345678901234",
             ProbabilidadPico = 0.75,
             NivelRiesgo = "Pre-Pico",
             HorasEstimadas = 2,
             Recomendacion = "Mantener hidratación",
-            ModeloVersion = "fallback-v1",
+            ModeloVersion = "pico-v1.0",
+            Imc = 26.12,
+            Z = -1.6,
+            PPico = 0.17,
+            CasoClinico = "Vigilancia",
+            AccionAutomatizada = "Observación",
             FechaPrediccion = DateTime.UtcNow,
             FechaExpiracion = DateTime.UtcNow.AddHours(2)
         };
@@ -138,15 +117,37 @@ public class MLServiceTests
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var result = await _service.GuardarPrediccionAsync(respuesta);
+        var result = await _service.GuardarPrediccionAsync(entidad);
 
         result.Should().NotBeNull();
         result.PacienteId.Should().Be("123456789012345678901234");
         result.ProbabilidadPico.Should().Be(0.75);
         result.NivelRiesgo.Should().Be("Pre-Pico");
-        result.HorasEstimadas.Should().Be(2);
-        result.Recomendacion.Should().Be("Mantener hidratación");
-        result.ModeloVersion.Should().Be("fallback-v1");
+        result.Imc.Should().Be(26.12);
+        result.PPico.Should().Be(0.17);
+        result.CasoClinico.Should().Be("Vigilancia");
+    }
+
+    [Fact]
+    public async Task GuardarPrediccionAsync_SinFechaPrediccion_AsignaFechaActual()
+    {
+        var entidad = new PrediccionMl
+        {
+            PacienteId = "123456789012345678901234",
+            ProbabilidadPico = 0.4,
+            NivelRiesgo = "Normal",
+            FechaPrediccion = default
+        };
+
+        _mockPredicciones.Setup(c => c.InsertOneAsync(
+                It.IsAny<PrediccionMl>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await _service.GuardarPrediccionAsync(entidad);
+
+        result.FechaPrediccion.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
     }
 
     [Fact]
@@ -185,92 +186,5 @@ public class MLServiceTests
         var result = await _service.ObtenerPrediccionesAsync("nonexistent");
 
         result.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task ObtenerModelosAsync_ConModelos_RetornaLista()
-    {
-        var modelos = new List<ModeloMl>
-        {
-            new() { Id = "m1", Version = "1.0.0", Descripcion = "Modelo v1", Activo = true, FechaEntrenamiento = DateTime.UtcNow },
-            new() { Id = "m2", Version = "2.0.0", Descripcion = "Modelo v2", Activo = false, FechaEntrenamiento = DateTime.UtcNow.AddDays(-1) }
-        };
-
-        _mockDb.Setup(db => db.FindToListAsync(
-                _mockModelos.Object,
-                It.IsAny<FilterDefinition<ModeloMl>>(),
-                It.IsAny<SortDefinition<ModeloMl>>(),
-                It.IsAny<int?>(),
-                It.IsAny<int?>()))
-            .ReturnsAsync(modelos);
-
-        var result = await _service.ObtenerModelosAsync();
-
-        result.Should().HaveCount(2);
-    }
-
-    [Fact]
-    public async Task ObtenerModeloActivoAsync_ConModeloActivo_RetornaModelo()
-    {
-        var modelo = new ModeloMl
-        {
-            Id = "m1", Version = "1.0.0", Activo = true, Accuracy = 0.92
-        };
-
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                _mockModelos.Object,
-                It.IsAny<System.Linq.Expressions.Expression<Func<ModeloMl, bool>>>()))
-            .ReturnsAsync(modelo);
-
-        var result = await _service.ObtenerModeloActivoAsync();
-
-        result.Should().NotBeNull();
-        result!.Activo.Should().BeTrue();
-        result.Accuracy.Should().Be(0.92);
-    }
-
-    [Fact]
-    public async Task ObtenerModeloActivoAsync_SinModeloActivo_RetornaNull()
-    {
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                _mockModelos.Object,
-                It.IsAny<System.Linq.Expressions.Expression<Func<ModeloMl, bool>>>()))
-            .ReturnsAsync((ModeloMl?)null);
-
-        var result = await _service.ObtenerModeloActivoAsync();
-
-        result.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task ObtenerMetricasAsync_ModeloExiste_RetornaModelo()
-    {
-        var modelo = new ModeloMl
-        {
-            Id = "m1", Version = "1.0.0", Accuracy = 0.92, Activo = true
-        };
-
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                _mockModelos.Object,
-                It.IsAny<System.Linq.Expressions.Expression<Func<ModeloMl, bool>>>()))
-            .ReturnsAsync(modelo);
-
-        var result = await _service.ObtenerMetricasAsync("m1");
-
-        result.Should().NotBeNull();
-        result!.Accuracy.Should().Be(0.92);
-    }
-
-    [Fact]
-    public async Task ObtenerMetricasAsync_ModeloNoExiste_RetornaNull()
-    {
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                _mockModelos.Object,
-                It.IsAny<System.Linq.Expressions.Expression<Func<ModeloMl, bool>>>()))
-            .ReturnsAsync((ModeloMl?)null);
-
-        var result = await _service.ObtenerMetricasAsync("nonexistent");
-
-        result.Should().BeNull();
     }
 }

@@ -18,7 +18,6 @@ public interface IMongoDbContext
     IMongoCollection<Auditoria> Auditoria { get; }
     IMongoCollection<Pago> Pagos { get; }
     IMongoCollection<PrediccionMl> PrediccionesMl { get; }
-    IMongoCollection<ModeloMl> ModelosMl { get; }
     IMongoCollection<FcmToken> FcmTokens { get; }
     IMongoCollection<RefreshToken> RefreshTokens { get; }
     IMongoCollection<Medicamento> Medicamentos { get; }

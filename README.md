@@ -58,7 +58,7 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 | Deploy | DigitalOcean App Platform | |
 | API Docs | Swagger / OpenAPI | |
 | Tests | xUnit + FluentAssertions | 518 tests |
-| ML Service | Python / FastAPI | 3.12 (microservicio `MLServicePython/`) |
+| ML Service | Repo dedicado `Machine-Learning-BioGuard` (FastAPI) | cálculo en móvil, pesos en Mongo |
 
 ## Funcionalidades
 
@@ -113,11 +113,9 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 - Exportar lecturas a CSV
 
 ### Módulo 8: Machine Learning
-- **Microservicio Python** (`MLServicePython/`, FastAPI): endpoint `POST /api/v1/predicciones` (glucosa + telemetría: pulso, temperatura, sudoración) y `POST /api/v1/train`. **Predictor v0**: baseline heurístico basado en rangos clínicos (fallback sin modelo entrenado), sustituible por el modelo entrenado cuando haya volumen histórico.
-- **Integración .NET → Python**: `MLPredictionClient` (HttpClient tipado) envía las últimas 100 lecturas del paciente y guarda la respuesta en `predicciones_ml` vía `MLService.GuardarPrediccionAsync`.
-- **Config**: sección `"ML"` en `appsettings.json` (`BaseUrl`, `TimeoutSeconds`) o variable de entorno `ML_API_URL`.
-- **Fallback resiliente**: si el microservicio no está configurado/disponible, `POST /api/ML/diagnosticar` devuelve la última predicción almacenada o `503`.
-- Predicciones de riesgo metabólico, recomendaciones personalizadas, entrenamiento y re-entrenamiento de modelos, diagnósticos puntuales, métricas de modelos.
+- El modelo de picos glucémicos (F1: IMC, F2: red logística, F3: P(Pico) sigmoide + matriz de riesgo) vive en el repo dedicado **`Machine-Learning-BioGuard`** (FastAPI, pesos en Mongo, colección `modelos`, clave `pesos_pico`).
+- El cálculo se ejecuta en el móvil (motor local Kotlin); el backend .NET solo persiste el reporte en `predicciones_ml` vía `POST /api/Sensores/prediccion` y lo expone a la web en `GET /api/Sensores/predicciones/{pacienteId}` y `.../actual`.
+- Las lecturas de sensores reciben la `probabilidadPico` calculada por el móvil (`POST /api/Sensores/lectura`).
 
 ### Módulo 9: Pagos y Planes
 - 3 planes: Gratis ($0), Familiar ($1 MXN), Pro ($2 MXN) — suscripciones mensuales
@@ -160,13 +158,12 @@ API RESTful para el ecosistema médico IoT **BioGuard**. Gestiona pacientes con 
 | Controlador | Endpoints protegidos |
 |---|---|
 | `PacientesController` | GetById, Update, Delete |
-| `SensoresController` | Lecturas, Estadísticas, Eventos, Tracking, Reportes |
+| `SensoresController` | Lecturas, Estadísticas, Eventos, Tracking, Reportes, Predicciones ML |
 | `AlertasController` | GetByPaciente, Pendientes, GetById, Crear, Resolver, Delete |
 | `MedicamentosController` | GetByPaciente, GetById, Update, RegistrarToma, CambiarActivo, Delete |
 | `CuidadoresController` | GetByPaciente, Crear, Update, Delete |
 | `NotificacionesController` | GetByPaciente, Crear, MarcarLeida, Eliminar |
 | `ReportesController` | Resumen, HistorialAlertas, HistorialEventos, HistorialMedicamentos, HistorialLecturas |
-| `MLController` | ObtenerPredicciones, PrediccionActual, Recomendaciones, Diagnosticar |
 | `PagosController` | Recibo (verificación de propietario del pago) |
 | `DispositivosController` | GetByPaciente, Update, Desvincular |
 
@@ -228,7 +225,6 @@ BioGuard.Api/
 │   ├── CuidadoresController.cs     # CRUD cuidadores
 │   ├── NotificacionesController.cs # Notificaciones push
 │   ├── ReportesController.cs       # Reportes + exportar CSV
-│   ├── MLController.cs             # Predicciones ML
 │   ├── PagosController.cs          # Pagos + recibos
 │   ├── PlanesController.cs         # CRUD planes
 │   ├── UsuariosWebController.cs    # Perfil de usuario
@@ -241,8 +237,8 @@ BioGuard.Api/
 │   ├── TrackingGps.cs      ├── Alerta.cs
 │   ├── Medicamento.cs      ├── Notificacion.cs
 │   ├── Pago.cs             ├── Plan.cs
-│   ├── PrediccionMl.cs     ├── ModeloMl.cs
-│   ├── Auditoria.cs        ├── FcmToken.cs
+│   ├── PrediccionMl.cs     ├── Auditoria.cs
+│   ├── FcmToken.cs
 │   ├── RefreshToken.cs     └── TokenBlacklist.cs
 ├── Services/              # 15 servicios
 │   ├── AuthService.cs             # JWT + PBKDF2 + 2FA + Refresh
@@ -254,7 +250,7 @@ BioGuard.Api/
 │   ├── CuidadorService.cs         # Cuidadores
 │   ├── NotificacionService.cs     # Notificaciones push
 │   ├── ReporteService.cs          # Reportes
-│   ├── MLService.cs               # ML + predicciones
+│   ├── MLService.cs               # Reportes de pico glucémico (persistencia)
 │   ├── PagosService.cs            # Pagos
 │   ├── UsuariosWebService.cs      # Perfil
 │   ├── DispositivoService.cs      # WearOS
@@ -266,15 +262,6 @@ BioGuard.Api/
 ├── appsettings.json       # Configuración + JWT secrets
 ├── Dockerfile             # Multi-stage build
 └── BioGuard.Api.csproj    # .NET 9 project
-
-MLServicePython/
-├── app/
-│   ├── main.py            # FastAPI: /health, /api/v1/train, /api/v1/predicciones
-│   ├── ml.py              # Predictor v0 (heurístico) + modelo GradientBoosting
-│   └── schemas.py         # Pydantic models
-├── Dockerfile             # python:3.12-slim, puerto 8000
-├── requirements.txt
-└── tests/                 # pytest (4 tests)
 ```
 
 ## Base de Datos (MongoDB Atlas)
@@ -403,18 +390,13 @@ MLServicePython/
 | GET | `/api/Reportes/historial-medicamentos/{pacienteId}` | Historial medicamentos | JWT |
 | GET | `/api/Reportes/historial-lecturas/{pacienteId}` | Historial lecturas | JWT |
 
-### ML (8 endpoints)
+### ML / Predicciones (3 endpoints)
 
 | Método | Ruta | Descripción | Auth |
 |---|---|---|---|
-| GET | `/api/ML/predicciones/{pacienteId}` | Predicciones del paciente | JWT |
-| GET | `/api/ML/predicciones/{pacienteId}/actual` | Predicción actual | JWT |
-| GET | `/api/ML/recomendaciones/{pacienteId}` | Recomendaciones | JWT |
-| GET | `/api/ML/modelos` | Modelos entrenados | JWT |
-| GET | `/api/ML/metricas/{modeloId}` | Métricas de modelo | JWT |
-| POST | `/api/ML/entrenar` | Entrenar modelo | JWT |
-| POST | `/api/ML/reentrenar` | Re-entrenar modelo | JWT |
-| POST | `/api/ML/diagnosticar` | Diagnóstico puntual | JWT |
+| POST | `/api/Sensores/prediccion` | El móvil guarda el reporte de pico glucémico (imc, z, pPico, caso, acción) | JWT |
+| GET | `/api/Sensores/predicciones/{pacienteId}` | Historial de reportes | JWT |
+| GET | `/api/Sensores/predicciones/{pacienteId}/actual` | Reporte vigente | JWT |
 
 ### Pagos (5 endpoints)
 
@@ -535,18 +517,17 @@ docker run -p 5000:8080 \
 | `SMTP_FROM` | Email remitente |
 | `Stripe__SecretKey` o `STRIPE_SECRET_KEY` | Clave secreta de Stripe (`sk_test_...` / `sk_live_...`) |
 | `Stripe__WebhookSecret` o `STRIPE_WEBHOOK_SECRET` | Secreto del webhook de Stripe (`whsec_...`) |
-| `ML_API_URL` | URL base del microservicio Python (`http://bioguard-ml:8080` en DO App Platform; `http://bioguard-ml:8000` en docker-compose) |
 
 ### CI/CD Pipeline (GitHub Actions)
 
-1. **Build & Test**: Compila, corre 518 tests, NuGet audit, licencias, **tests del microservicio Python (pytest)**
+1. **Build & Test**: Compila, corre los tests .NET, NuGet audit y licencias
 2. **CodeQL Analysis (SAST)**: Análisis estático de seguridad (con `codeql-config.yml` que excluye el query ruidoso de "Uncontrolled Data Used in Path Expression")
 3. **Secret Scanning**: Escaneo de secretos expuestos
 4. **Container Security Scan**: Escaneo de vulnerabilidades en la imagen Docker
-5. **Docker Build**: Build multi-stage de la API **y del microservicio ML** (`ghcr.io/lizperz/backend-bioguard-ml`), firmado con cosign, push a GitHub Container Registry
+5. **Docker Build**: Build multi-stage de la API, firmado con cosign, push a GitHub Container Registry
 6. **DAST Scan (semanal)**: OWASP ZAP — análisis dinámico de seguridad contra producción
 7. **Security Gate**: Bloquea el merge si el escaneo de la imagen reporta vulnerabilidades `critical` o `high` sin excepción aprobada
-8. **Deploy**: DigitalOcean App Platform (auto-deploy desde master) — app con 2 servicios: `bioguard-api` + `bioguard-ml`
+8. **Deploy**: DigitalOcean App Platform (auto-deploy desde master) — app con 1 servicio: `bioguard-api`
 
 **Dependabot**: Habilitado con semanal, agrupando updates por ecosistema (NuGet, GitHub Actions, Docker) y 50 PRs máximo abiertos para mantener el tablero manejable.
 
@@ -602,17 +583,16 @@ Authorization: Bearer <admin_token>
 
 ## Changelog
 
-### Integración Microservicio ML Python ↔ .NET (rama-Liz -> master)
+### Migración ML al repo Machine-Learning-BioGuard (rama-Liz -> master)
 
 | Mejora | Descripción |
 |---|---|
-| **`MLPredictionClient`** | Nuevo `BioGuard.Api/Services/MLPredictionClient.cs`: HttpClient tipado que envía las últimas 100 lecturas a `POST /api/v1/predicciones` del microservicio Python y normaliza fechas UTC. |
-| **`MLOptions`** | Nueva sección `"ML"` en `appsettings.json` (`BaseUrl`, `TimeoutSeconds`) con fallback a env var `ML_API_URL` en `Program.cs`. |
-| **`MLService.GuardarPrediccionAsync`** | Persiste la respuesta del microservicio en `predicciones_ml`. |
-| **`POST /api/ML/diagnosticar`** | Ahora llama al microservicio real: sin lecturas → `200 "Sin lecturas..."`; microservicio no configurado/no disponible → última predicción almacenada o `503`. |
-| **Tests** | +7 tests (5 `MLPredictionClientTests` con handler stub, 1 `GuardarPrediccionAsync`, 1 `Diagnosticar_SinPrediccionPrevia_Retorna503`). **518 tests .NET + 4 pytest**, todos verdes. |
-| **Deploy** | `.do/app.yaml` con segundo servicio `bioguard-ml` (imagen `ghcr.io/lizperz/backend-bioguard-ml`); `docker-compose.yml` con servicio Python; CI construye/pushea la imagen ML y corre pytest. |
-| **Python** | Fechas de respuesta con timezone UTC (elimina ambigüedad de parseo en .NET); tests sin warnings de deprecación. |
+| **Eliminado `MLPredictionClient`** | Se quita el HttpClient tipado que llamaba al microservicio Python; el cálculo de picos se ejecuta en el móvil con el motor F1-F3. |
+| **Eliminado `MLController` y `MLOptions`** | Se eliminan `/api/ML/*` (entrenar, reentrenar, modelos, métricas, diagnosticar) y la sección `"ML"` de configuración. |
+| **Eliminado `MLServicePython/`** | Se borra el microservicio Python embebido y sus referencias en `docker-compose.yml`, `.do/app.yaml`, `ci.yml` y `.gitignore`. |
+| **Nuevos endpoints de reporte** | `POST /api/Sensores/prediccion` (el móvil persiste su reporte: imc, z, pPico, caso clínico, acción) y `GET /api/Sensores/predicciones/{pacienteId}` (+ `/actual`) para la web. |
+| **Lecturas con riesgo del móvil** | `LecturaSensorRequest` acepta `probabilidadPico` calculada en local; `SensoresController` la persiste sin llamar a ningún servicio ML. |
+| **Eliminado `ModeloMl`/`ModelosMl`** | Los modelos viven en el Mongo del repo ML (colección `modelos`, clave `pesos_pico`); `RiesgoService` devuelve versión fija `pico-v1.0`. |
 
 ### DevSecOps — Security Gate, CodeQL config y mínima exposición de PII en logs
 
@@ -712,7 +692,7 @@ Authorization: Bearer <admin_token>
 | **IPaymentGateway duplicado** | Stripe y PayPal registrados como `IPaymentGateway` — solo PayPal era resuelto. Se eliminan (código muerto). |
 | **IImageStorageService redundante** | `AddScoped` duplicado antes de `AddHttpClient`. Eliminado el redundante. |
 | **CS8618 eliminado** | `_database = null!` en constructor `protected` de `MongoDbContext`. |
-| **Cobertura de tests al 100%** | **44 tests nuevos** para AdminController, MLController, login-google, refresh, logout, vincular, FCM y migrate-prices. **458 tests**, 0 fallos. |
+| **Cobertura de tests al 100%** | **44 tests nuevos** para AdminController, login-google, refresh, logout, vincular, FCM y migrate-prices. **458 tests**, 0 fallos. |
 | **0 warnings, 0 errores** | Build completamente limpio. |
 
 ### PR #62 — Logout Total + Multi-Rol Refresh Token (rama-Liz -> master)

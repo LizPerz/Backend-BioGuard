@@ -1,21 +1,6 @@
 version: "3.8"
 
 services:
-  bioguard-ml:
-    build:
-      context: MLServicePython
-      dockerfile: Dockerfile
-    container_name: bioguard-ml
-    ports:
-      - "8000:8000"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 5s
-      start_period: 10s
-      retries: 3
-
   bioguard-api:
     build:
       context: .
@@ -23,12 +8,9 @@ services:
     container_name: bioguard-api
     ports:
       - "8080:8080"
-    depends_on:
-      - bioguard-ml
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
-      - ML_API_URL=http://bioguard-ml:8000
       - MONGODB_CONNECTION_STRING=${MONGODB_CONNECTION_STRING}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}

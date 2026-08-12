@@ -212,12 +212,6 @@ builder.Services.Configure<StripeOptions>(options =>
 });
 builder.Services.Configure<FirebaseOptions>(builder.Configuration.GetSection("Firebase"));
 builder.Services.Configure<ImgBbOptions>(builder.Configuration.GetSection("ImgBB"));
-builder.Services.Configure<MLOptions>(options =>
-{
-    builder.Configuration.GetSection("ML").Bind(options);
-    if (string.IsNullOrEmpty(options.BaseUrl))
-        options.BaseUrl = Environment.GetEnvironmentVariable("ML_API_URL") ?? "";
-});
 
 // =============================================
 // SERVICES (Dependency Injection)
@@ -231,7 +225,6 @@ builder.Services.AddScoped<CuidadorService>();
 builder.Services.AddScoped<DispositivoService>();
 builder.Services.AddScoped<NotificacionService>();
 builder.Services.AddScoped<MLService>();
-builder.Services.AddHttpClient<MLPredictionClient>();
 builder.Services.AddScoped<AuditoriaService>();
 builder.Services.AddScoped<MedicamentoService>();
 builder.Services.AddScoped<AlertaService>();
@@ -591,18 +584,12 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
         }, "pago");
 
         var version = $"1.0.{rnd.Next(0, 999)}";
-        await SafeInsertOne(db.ModelosMl, new ModeloMl
-        {
-            Version = version, FechaEntrenamiento = now.AddDays(-7),
-            Accuracy = 0.89, Precision = 0.87, Recall = 0.91, F1Score = 0.89,
-            TotalMuestras = 5000, Activo = true, Descripcion = "Modelo ML de predicción de picos"
-        }, "modelo-ml");
-
         await SafeInsertOne(db.PrediccionesMl, new PrediccionMl
         {
             PacienteId = paciente.Id, ProbabilidadPico = 0.72, NivelRiesgo = "Pre-Pico",
             HorasEstimadas = 4, Recomendacion = "Mantener hidratación y verificar glucosa en 2 horas",
-            ModeloVersion = version, FechaPrediccion = now.AddMinutes(-30), FechaExpiracion = now.AddHours(2)
+            ModeloVersion = version, CasoClinico = "Vigilancia",
+            FechaPrediccion = now.AddMinutes(-30), FechaExpiracion = now.AddHours(2)
         }, "prediccion-ml");
 
         return Results.Ok(new
@@ -610,7 +597,7 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
             message = "Seed data inserted",
             userId = user.Id, pacienteId = paciente.Id, cuidadorUserId = cuidadorUser.Id,
             email = testEmail,
-            skipped, stats = new { lecturas = lecturas.Count, eventos = eventos.Count, tracking = 3, medicamentos = medNames.Length, alertas = 3, notificaciones = 2, dispositivos = 1, cuidadores = 1, pagos = 1, modelos = 1, predicciones = 1 }
+            skipped, stats = new { lecturas = lecturas.Count, eventos = eventos.Count, tracking = 3, medicamentos = medNames.Length, alertas = 3, notificaciones = 2, dispositivos = 1, cuidadores = 1, pagos = 1, predicciones = 1 }
         });
     }
     catch (Exception ex)
