@@ -17,7 +17,8 @@ public class SensorService
     }
 
     public async Task<LecturaSensor> InsertarLecturaAsync(string pacienteId, string dispositivoMac,
-        int pulsoBpm, double temperaturaC, double sudoracionGsr, double probabilidadPico, int diasHistorial = 30)
+        int pulsoBpm, double temperaturaC, double sudoracionGsr, double probabilidadPico,
+        int? pasos = null, double? glucosaEstimadaMgDl = null, int diasHistorial = 30)
     {
         var now = DateTime.UtcNow;
         var lectura = new LecturaSensor
@@ -32,6 +33,8 @@ public class SensorService
             TemperaturaC = temperaturaC,
             SudoracionGsr = sudoracionGsr,
             ProbabilidadPico = probabilidadPico,
+            Pasos = pasos,
+            GlucosaEstimadaMgDl = glucosaEstimadaMgDl,
             ExpireAt = now.AddDays(diasHistorial)
         };
 
