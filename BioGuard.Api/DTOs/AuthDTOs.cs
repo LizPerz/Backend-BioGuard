@@ -159,7 +159,7 @@ public record PlanResponse(
 
 public record UpdatePerfilRequest(
     [Required] [StringLength(100)] string Nombre,
-    [Required] [StringLength(100)] string ApellidoPaterno,
+    [StringLength(100)] string ApellidoPaterno,
     [StringLength(100)] string ApellidoMaterno);
 
 public record CambiarCorreoRequest(

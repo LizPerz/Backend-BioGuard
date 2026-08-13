@@ -156,12 +156,13 @@ public class UsuariosWebController : ControllerBase
                     _logger.LogWarning("Patient {PacienteId} not found", usuarioId);
                     return NotFound();
                 }
+                var (pNombre, pApellidoPaterno, pApellidoMaterno) = DividirNombre(paciente.Nombre);
                 return Ok(new
                 {
                     Id = paciente.Id,
-                    Nombre = paciente.Nombre,
-                    ApellidoPaterno = (string?)null,
-                    ApellidoMaterno = (string?)null,
+                    Nombre = pNombre,
+                    ApellidoPaterno = pApellidoPaterno,
+                    ApellidoMaterno = pApellidoMaterno,
                     Correo = (string?)null,
                     FotoPerfil = NormalizarFoto(paciente.Foto),
                     FechaRegistro = paciente.FechaRegistro,
@@ -175,12 +176,13 @@ public class UsuariosWebController : ControllerBase
                     _logger.LogWarning("Caregiver {CuidadorId} not found", usuarioId);
                     return NotFound();
                 }
+                var (cNombre, cApellidoPaterno, cApellidoMaterno) = DividirNombre(cuidador.Nombre);
                 return Ok(new
                 {
                     Id = cuidador.Id,
-                    Nombre = cuidador.Nombre,
-                    ApellidoPaterno = (string?)null,
-                    ApellidoMaterno = (string?)null,
+                    Nombre = cNombre,
+                    ApellidoPaterno = cApellidoPaterno,
+                    ApellidoMaterno = cApellidoMaterno,
                     Correo = cuidador.Correo,
                     FotoPerfil = NormalizarFoto(cuidador.Foto),
                     FechaRegistro = cuidador.FechaAutorizacion,
@@ -219,8 +221,26 @@ public class UsuariosWebController : ControllerBase
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
-        _logger.LogInformation("Updating profile for user {UsuarioId}", usuarioId);
-        var result = await _usuariosWebService.UpdatePerfilAsync(usuarioId, request);
+        var rol = User.FindFirst(ClaimTypes.Role)?.Value ?? "dueno";
+        _logger.LogInformation("Updating profile for user {UsuarioId} role {Rol}", usuarioId, rol);
+
+        var nombreCompleto = string.Join(" ", new[] { request.Nombre, request.ApellidoPaterno, request.ApellidoMaterno }
+            .Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
+
+        bool result;
+        if (rol == "cuidador")
+        {
+            result = await _cuidadorService.UpdateNombreAsync(usuarioId, nombreCompleto);
+        }
+        else if (rol == "paciente")
+        {
+            result = await _pacienteService.UpdateNombreAsync(usuarioId, nombreCompleto);
+        }
+        else
+        {
+            result = await _usuariosWebService.UpdatePerfilAsync(usuarioId, request);
+        }
+
         if (!result)
         {
             _logger.LogWarning("Profile update failed for user {UsuarioId}", usuarioId);
@@ -361,6 +381,14 @@ public class UsuariosWebController : ControllerBase
         // su foto es propia (campo Foto del Cuidador), no la del paciente vinculado.
         if (rol == "paciente") return usuarioId;
         return null;
+    }
+
+    private static (string Nombre, string? ApellidoPaterno, string? ApellidoMaterno) DividirNombre(string? nombreCompleto)
+    {
+        var partes = (nombreCompleto ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (partes.Length == 0) return ("", null, null);
+        if (partes.Length == 1) return (partes[0], null, null);
+        return (partes[0], string.Join(" ", partes.Skip(1)), null);
     }
 
     private async Task<string?> ResolverGrupoPacienteAsync(string usuarioId, string rol)

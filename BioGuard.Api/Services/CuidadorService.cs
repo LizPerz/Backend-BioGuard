@@ -94,6 +94,21 @@ public class CuidadorService
         return result.ModifiedCount > 0;
     }
 
+    public async Task<bool> UpdateNombreAsync(string cuidadorId, string nombre)
+    {
+        var update = Builders<Cuidador>.Update.Set(c => c.Nombre, nombre);
+        var result = await _db.Cuidadores.UpdateOneAsync(c => c.Id == cuidadorId, update);
+        if (result.ModifiedCount == 0)
+        {
+            _logger.LogWarning("Caregiver name update not found or unchanged: {CuidadorId}", cuidadorId);
+        }
+        else
+        {
+            _logger.LogInformation("Caregiver name updated: {CuidadorId}", cuidadorId);
+        }
+        return result.ModifiedCount > 0;
+    }
+
     public async Task<bool> EliminarAsync(string id)
     {
         var result = await _db.Cuidadores.DeleteOneAsync(c => c.Id == id);
