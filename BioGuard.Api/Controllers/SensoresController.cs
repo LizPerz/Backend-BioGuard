@@ -79,7 +79,8 @@ public class SensoresController : ControllerBase
         _logger.LogInformation("Receiving sensor reading for paciente: {PacienteId}", pacienteId);
         var lectura = await _sensorService.InsertarLecturaAsync(
             pacienteId, "wearos-001", request.PulsoBpm, request.TemperaturaC,
-            request.SudoracionGsr, Math.Clamp(request.ProbabilidadPico ?? 0.0, 0.0, 1.0));
+            request.SudoracionGsr, Math.Clamp(request.ProbabilidadPico ?? 0.0, 0.0, 1.0),
+            request.Pasos, request.GlucosaEstimadaMgDl);
 
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -105,7 +106,8 @@ public class SensoresController : ControllerBase
         {
             await _sensorService.InsertarLecturaAsync(
                 pacienteId, "wearos-001", lectura.PulsoBpm, lectura.TemperaturaC,
-                lectura.SudoracionGsr, Math.Clamp(lectura.ProbabilidadPico ?? 0.0, 0.0, 1.0));
+                lectura.SudoracionGsr, Math.Clamp(lectura.ProbabilidadPico ?? 0.0, 0.0, 1.0),
+                lectura.Pasos, lectura.GlucosaEstimadaMgDl);
             count++;
         }
 
@@ -263,6 +265,8 @@ public class SensoresController : ControllerBase
             l.TemperaturaC,
             l.SudoracionGsr,
             l.ProbabilidadPico,
+            l.Pasos,
+            l.GlucosaEstimadaMgDl,
             l.Timestamp
         });
         return Ok(response);
@@ -295,6 +299,8 @@ public class SensoresController : ControllerBase
             l.TemperaturaC,
             l.SudoracionGsr,
             l.ProbabilidadPico,
+            l.Pasos,
+            l.GlucosaEstimadaMgDl,
             l.Timestamp
         });
         return Ok(response);

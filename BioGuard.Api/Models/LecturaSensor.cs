@@ -27,6 +27,12 @@ public class LecturaSensor
     [BsonElement("probabilidad_pico")]
     public double ProbabilidadPico { get; set; }
 
+    [BsonElement("pasos")]
+    public int? Pasos { get; set; }
+
+    [BsonElement("glucosa_estimada_mg_dl")]
+    public double? GlucosaEstimadaMgDl { get; set; }
+
     [BsonElement("expireAt")]
     public DateTime ExpireAt { get; set; }
 }
