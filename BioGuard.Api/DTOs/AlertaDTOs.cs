@@ -14,7 +14,7 @@ public record CrearAlertaRequest(
     [Required] [StringLength(200)] string Titulo,
     [Required] [StringLength(500)] string Mensaje,
     int? PulsoBpm, double? TemperaturaC,
-    double? SudoracionGsr, double? ProbabilidadPico);
+    double? EstresPct, double? ProbabilidadPico);
 
 public record ResolverAlertaRequest(
     [Required] string CuidadorId,

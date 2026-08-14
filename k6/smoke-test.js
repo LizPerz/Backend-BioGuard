@@ -36,7 +36,7 @@ export default function () {
   if (TEST_PACIENTE_TOKEN) {
     const lecturaRes = http.post(
       `${BASE_URL}/api/Sensores/lectura`,
-      JSON.stringify({ pulsoBpm: 72, temperaturaC: 36.5, sudoracionGsr: 3.2, hrv: 45, spo2: 98 }),
+      JSON.stringify({ pulsoBpm: 72, temperaturaC: 36.5, estresPct: 35, hrv: 45, spo2: 98 }),
       {
         headers: {
           'Content-Type': 'application/json',

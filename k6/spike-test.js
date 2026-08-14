@@ -26,7 +26,7 @@ function generateBatch() {
     batch.push({
       pulsoBpm: Math.floor(Math.random() * 40) + 55,
       temperaturaC: Math.random() * 3 + 35,
-      sudoracionGsr: Math.random() * 8,
+      estresPct: Math.random() * 90,
       hrv: Math.floor(Math.random() * 60) + 20,
       spo2: Math.floor(Math.random() * 5) + 95,
     });

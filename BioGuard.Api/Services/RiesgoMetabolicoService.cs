@@ -96,9 +96,9 @@ public class RiesgoMetabolicoService : IRiesgoMetabolicoService
 
     private double EstimarHrv(LecturaSensor lectura)
     {
-        var gsrNormalizado = Math.Min(lectura.SudoracionGsr / 10.0, 1.0);
+        var estresNormalizado = Math.Min(Math.Max(lectura.EstresPct, 0.0), 100.0) / 100.0;
         var fcVariabilidad = lectura.PulsoBpm > 0 ? 60000.0 / lectura.PulsoBpm : 1000;
-        return fcVariabilidad * (1 - gsrNormalizado * 0.3);
+        return fcVariabilidad * (1 - estresNormalizado * 0.3);
     }
 
     private async Task<double> CalcularReposoPostEventoAsync(string pacienteId, DateTime timestamp)
@@ -143,7 +143,7 @@ public class RiesgoMetabolicoService : IRiesgoMetabolicoService
             if (tempDiff > 0.5) riesgo += tempDiff * 20;
         }
 
-        if (lectura.SudoracionGsr > 5) riesgo += lectura.SudoracionGsr * 5;
+        if (lectura.EstresPct > 50) riesgo += (lectura.EstresPct - 50) * 2;
 
         return Math.Min(riesgo, 100);
     }
@@ -226,6 +226,30 @@ public class RiesgoMetabolicoService : IRiesgoMetabolicoService
         }
     }
 
+    /// <summary>
+    /// Matriz de riesgo basada en los sensores físicos reales del Galaxy Watch 7:
+    /// Hipoglucemia (Pico Bajo):    Pulso &gt; 110, Temp &lt; 35.0°C, Estres &gt; 80%
+    /// Hiperglucemia (Pico Alto):   Pulso 95-110, Temp &gt; 37.2°C, Estres 60-80%
+    /// Optimo (Medio):              Pulso 60-80, Temp 36.0-36.7°C, Estres &lt; 50%
+    /// </summary>
+    public string ClasificarPorMatriz(LecturaSensor lectura)
+    {
+        var pulso = lectura.PulsoBpm;
+        var temp = lectura.TemperaturaC;
+        var estres = lectura.EstresPct;
+
+        if (pulso > 110 && temp < 35.0 && estres > 80)
+            return "Hipoglucemia";
+
+        if (pulso >= 95 && pulso <= 110 && temp > 37.2 && estres >= 60 && estres <= 80)
+            return "Hiperglucemia";
+
+        if (pulso >= 60 && pulso <= 80 && temp >= 36.0 && temp <= 36.7 && estres < 50)
+            return "Optimo";
+
+        return "Indeterminado";
+    }
+
     public Task<AlertTrigger?> CheckAlertTriggerAsync(string pacienteId, IrmeResult irmeResult)
     {
         var isSleepTime = DateTime.UtcNow.Hour >= SUEÑO_INICIO_HORA || DateTime.UtcNow.Hour < SUEÑO_FIN_HORA;
@@ -241,7 +265,7 @@ public class RiesgoMetabolicoService : IRiesgoMetabolicoService
                 {
                     PulsoBpm = (int)Math.Round(irmeResult.Components.FcRelativa),
                     TemperaturaC = Math.Round(irmeResult.Components.TempRelativa, 1),
-                    SudoracionGsr = (int)Math.Round(irmeResult.Components.HrvInversa),
+                    EstresPct = (int)Math.Round(irmeResult.Components.HrvInversa),
                     ProbabilidadPico = irmeResult.Score / 100.0
                 },
                 EsCriticoNocturno: true
@@ -259,7 +283,7 @@ public class RiesgoMetabolicoService : IRiesgoMetabolicoService
                 {
                     PulsoBpm = (int)Math.Round(irmeResult.Components.FcRelativa),
                     TemperaturaC = Math.Round(irmeResult.Components.TempRelativa, 1),
-                    SudoracionGsr = (int)Math.Round(irmeResult.Components.HrvInversa),
+                    EstresPct = (int)Math.Round(irmeResult.Components.HrvInversa),
                     ProbabilidadPico = irmeResult.Score / 100.0
                 },
                 EsCriticoNocturno: false

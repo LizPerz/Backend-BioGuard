@@ -41,12 +41,12 @@ public class SensorServiceTests
             .Returns(Task.CompletedTask);
 
         var result = await _service.InsertarLecturaAsync(
-            "123456789012345678901234", "AA:BB:CC:DD:EE:FF", 72, 36.5, 2.5, 0.3);
+            "123456789012345678901234", "AA:BB:CC:DD:EE:FF", 72, 36.5, 35.0, 0.3);
 
         result.Should().NotBeNull();
         result.PulsoBpm.Should().Be(72);
         result.TemperaturaC.Should().Be(36.5);
-        result.SudoracionGsr.Should().Be(2.5);
+        result.EstresPct.Should().Be(35.0);
         result.Meta.PacienteId.Should().Be("123456789012345678901234");
         result.Meta.DispositivoMac.Should().Be("AA:BB:CC:DD:EE:FF");
     }

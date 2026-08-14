@@ -514,7 +514,7 @@ app.MapPost("/api/Seed/seed-all", async (IMongoDbContext db, ILogger<Program> lo
                 Timestamp = ts,
                 PulsoBpm = isPrePico ? rnd.Next(100, 120) : rnd.Next(65, 95),
                 TemperaturaC = isPrePico ? 37.5 + rnd.NextDouble() * 0.8 : 36.2 + rnd.NextDouble() * 0.6,
-                SudoracionGsr = isPrePico ? 8.0 + rnd.NextDouble() * 4.0 : 2.0 + rnd.NextDouble() * 3.0,
+                EstresPct = isPrePico ? 60.0 + rnd.NextDouble() * 25.0 : 25.0 + rnd.NextDouble() * 25.0,
                 ProbabilidadPico = isPrePico ? 0.75 + rnd.NextDouble() * 0.2 : 0.1 + rnd.NextDouble() * 0.3,
                 ExpireAt = ts.AddDays(30)
             });

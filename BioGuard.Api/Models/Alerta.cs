@@ -51,8 +51,8 @@ public class SensorData
     [BsonElement("temperatura_c")]
     public double? TemperaturaC { get; set; }
 
-    [BsonElement("sudoracion_gsr")]
-    public double? SudoracionGsr { get; set; }
+    [BsonElement("estres_pct")]
+    public double? EstresPct { get; set; }
 
     [BsonElement("probabilidad_pico")]
     public double? ProbabilidadPico { get; set; }

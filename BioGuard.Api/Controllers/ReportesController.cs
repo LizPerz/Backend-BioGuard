@@ -178,7 +178,7 @@ public class ReportesController : ControllerBase
             l.Id,
             l.PulsoBpm,
             l.TemperaturaC,
-            l.SudoracionGsr,
+            l.EstresPct,
             l.ProbabilidadPico,
             l.Timestamp
         });

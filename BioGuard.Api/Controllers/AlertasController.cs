@@ -133,7 +133,7 @@ public class AlertasController : ControllerBase
         {
             PulsoBpm = request.PulsoBpm,
             TemperaturaC = request.TemperaturaC,
-            SudoracionGsr = request.SudoracionGsr,
+            EstresPct = request.EstresPct,
             ProbabilidadPico = request.ProbabilidadPico
         };
 
