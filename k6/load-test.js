@@ -24,7 +24,7 @@ const PACIENTE_TOKEN = __ENV.PACIENTE_TOKEN || '';
 const PAYLOAD = {
   pulsoBpm: 72,
   temperaturaC: 36.5,
-  sudoracionGsr: 3.2,
+  estresPct: 35,
   hrv: 45,
   spo2: 98,
 };

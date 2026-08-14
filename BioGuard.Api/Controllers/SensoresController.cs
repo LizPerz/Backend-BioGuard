@@ -79,7 +79,7 @@ public class SensoresController : ControllerBase
         _logger.LogInformation("Receiving sensor reading for paciente: {PacienteId}", pacienteId);
         var lectura = await _sensorService.InsertarLecturaAsync(
             pacienteId, "wearos-001", request.PulsoBpm, request.TemperaturaC,
-            request.SudoracionGsr, Math.Clamp(request.ProbabilidadPico ?? 0.0, 0.0, 1.0),
+            request.EstresPct, Math.Clamp(request.ProbabilidadPico ?? 0.0, 0.0, 1.0),
             request.Pasos, request.GlucosaEstimadaMgDl);
 
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
@@ -106,7 +106,7 @@ public class SensoresController : ControllerBase
         {
             await _sensorService.InsertarLecturaAsync(
                 pacienteId, "wearos-001", lectura.PulsoBpm, lectura.TemperaturaC,
-                lectura.SudoracionGsr, Math.Clamp(lectura.ProbabilidadPico ?? 0.0, 0.0, 1.0),
+                lectura.EstresPct, Math.Clamp(lectura.ProbabilidadPico ?? 0.0, 0.0, 1.0),
                 lectura.Pasos, lectura.GlucosaEstimadaMgDl);
             count++;
         }
@@ -263,7 +263,7 @@ public class SensoresController : ControllerBase
             l.Id,
             l.PulsoBpm,
             l.TemperaturaC,
-            l.SudoracionGsr,
+            l.EstresPct,
             l.ProbabilidadPico,
             l.Pasos,
             l.GlucosaEstimadaMgDl,
@@ -297,7 +297,7 @@ public class SensoresController : ControllerBase
             l.Id,
             l.PulsoBpm,
             l.TemperaturaC,
-            l.SudoracionGsr,
+            l.EstresPct,
             l.ProbabilidadPico,
             l.Pasos,
             l.GlucosaEstimadaMgDl,
@@ -338,7 +338,7 @@ public class SensoresController : ControllerBase
         {
             UltimoPulso = ultima.PulsoBpm,
             UltimaTemperatura = ultima.TemperaturaC,
-            UltimaSudoracion = ultima.SudoracionGsr,
+            UltimaEstres = ultima.EstresPct,
             PromedioPulso = lecturas.Average(l => l.PulsoBpm),
             PromedioTemperatura = lecturas.Average(l => l.TemperaturaC),
             EstadoActual = ultima.ProbabilidadPico > 0.85 ? "Critico" : "Normal",
@@ -500,10 +500,10 @@ public class SensoresController : ControllerBase
         var lecturas = await _sensorService.ObtenerLecturasAsync(pacienteId, 1000);
 
         var csv = new System.Text.StringBuilder();
-        csv.AppendLine("Timestamp,PulsoBpm,TemperaturaC,SudoracionGsr,ProbabilidadPico");
+        csv.AppendLine("Timestamp,PulsoBpm,TemperaturaC,EstresPct,ProbabilidadPico");
         foreach (var l in lecturas)
         {
-            csv.AppendLine($"{l.Timestamp:O},{l.PulsoBpm},{l.TemperaturaC},{l.SudoracionGsr},{l.ProbabilidadPico}");
+            csv.AppendLine($"{l.Timestamp:O},{l.PulsoBpm},{l.TemperaturaC},{l.EstresPct},{l.ProbabilidadPico}");
         }
 
         var bytes = System.Text.Encoding.UTF8.GetBytes(csv.ToString());

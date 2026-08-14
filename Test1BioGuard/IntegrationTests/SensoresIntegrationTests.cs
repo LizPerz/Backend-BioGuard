@@ -72,7 +72,7 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
                 Meta = new MetaData { PacienteId = pacienteId },
                 PulsoBpm = 75,
                 TemperaturaC = 36.5,
-                SudoracionGsr = 12.0,
+                EstresPct = 35.0,
                 ProbabilidadPico = 0.2,
                 Timestamp = DateTime.UtcNow
             }
@@ -219,7 +219,7 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
                 Id = "lec1",
                 PulsoBpm = 80,
                 TemperaturaC = 36.5,
-                SudoracionGsr = 10.0,
+                EstresPct = 35.0,
                 ProbabilidadPico = 0.3,
                 Timestamp = DateTime.UtcNow,
                 Meta = new MetaData { PacienteId = pacienteId }
@@ -229,7 +229,7 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
                 Id = "lec2",
                 PulsoBpm = 90,
                 TemperaturaC = 37.0,
-                SudoracionGsr = 15.0,
+                EstresPct = 55.0,
                 ProbabilidadPico = 0.7,
                 Timestamp = DateTime.UtcNow.AddSeconds(-10),
                 Meta = new MetaData { PacienteId = pacienteId }
@@ -436,9 +436,9 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
                 Meta = new MetaData { PacienteId = pacienteId },
                 PulsoBpm = 75,
                 TemperaturaC = 36.5,
-                SudoracionGsr = 12.0,
+                EstresPct = 35.0,
                 ProbabilidadPico = 0.2,
-                Timestamp = new DateTime(2024, 6, 15, 12, 0, 0, DateTimeKind.Utc)
+                Timestamp = DateTime.UtcNow
             }
         };
 
@@ -699,7 +699,7 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
                 Meta = new MetaData { PacienteId = pacienteId },
                 PulsoBpm = 75,
                 TemperaturaC = 36.5,
-                SudoracionGsr = 12.0,
+                EstresPct = 35.0,
                 ProbabilidadPico = 0.2,
                 Timestamp = DateTime.UtcNow
             }
@@ -720,7 +720,7 @@ public class SensoresIntegrationTests : IClassFixture<CustomWebApplicationFactor
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var csv = await response.Content.ReadAsStringAsync();
-        csv.Should().Contain("Timestamp,PulsoBpm,TemperaturaC,SudoracionGsr,ProbabilidadPico");
+        csv.Should().Contain("Timestamp,PulsoBpm,TemperaturaC,EstresPct,ProbabilidadPico");
          csv.Should().Contain("75");
      }
 

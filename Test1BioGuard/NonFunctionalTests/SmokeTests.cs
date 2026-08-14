@@ -68,7 +68,7 @@ public class SmokeTests : IClassFixture<CustomWebApplicationFactory>
         {
             pulsoBpm = 72,
             temperaturaC = 36.5,
-            sudoracionGsr = 3.2
+            estresPct = 35.0
         };
 
         var response = await _client.PostAsJsonAsync("/api/Sensores/lectura", payload);

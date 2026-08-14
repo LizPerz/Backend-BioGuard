@@ -8,6 +8,7 @@ public interface IRiesgoMetabolicoService
     Task<PacienteBaseline> GetOrCreateBaselineAsync(string pacienteId);
     Task UpdateBaselineAsync(string pacienteId, LecturaSensor lectura);
     Task<AlertTrigger?> CheckAlertTriggerAsync(string pacienteId, IrmeResult irmeResult);
+    string ClasificarPorMatriz(LecturaSensor lectura);
 }
 
 public record IrmeResult(
