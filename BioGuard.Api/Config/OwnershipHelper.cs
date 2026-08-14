@@ -18,7 +18,7 @@ public class OwnershipHelper
         if (role == "cuidador")
         {
             var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c =>
-                (c.UsuarioWebId == userId || c.UsuarioVinculadoId == userId) && c.PacienteId == pacienteId);
+                (c.Id == userId || c.UsuarioWebId == userId || c.UsuarioVinculadoId == userId) && c.PacienteId == pacienteId);
             return cuidador != null;
         }
 
