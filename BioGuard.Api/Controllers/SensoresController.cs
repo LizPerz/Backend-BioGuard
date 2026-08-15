@@ -86,7 +86,7 @@ public class SensoresController : ControllerBase
 
         _logger.LogInformation("Receiving sensor reading for paciente: {PacienteId}", pacienteId);
         var lectura = await _sensorService.InsertarLecturaAsync(
-            pacienteId, "wearos-001", request.PulsoBpm, request.TemperaturaC,
+            pacienteId, "wearos-001", (int)Math.Round(request.PulsoBpm), request.TemperaturaC,
             request.EstresPct, Math.Clamp(request.ProbabilidadPico ?? 0.0, 0.0, 1.0),
             request.Pasos, request.GlucosaEstimadaMgDl);
 
@@ -121,7 +121,7 @@ public class SensoresController : ControllerBase
         foreach (var lectura in request)
         {
             await _sensorService.InsertarLecturaAsync(
-                pacienteId, "wearos-001", lectura.PulsoBpm, lectura.TemperaturaC,
+                pacienteId, "wearos-001", (int)Math.Round(lectura.PulsoBpm), lectura.TemperaturaC,
                 lectura.EstresPct, Math.Clamp(lectura.ProbabilidadPico ?? 0.0, 0.0, 1.0),
                 lectura.Pasos, lectura.GlucosaEstimadaMgDl);
             count++;
@@ -485,9 +485,9 @@ public class SensoresController : ControllerBase
         return Ok(new
         {
             Total = eventos.Count,
-            Criticos = eventos.Count(e => e.NivelRiesgo == "Critico"),
-            PrePico = eventos.Count(e => e.NivelRiesgo == "Pre-Pico"),
-            Normal = eventos.Count(e => e.NivelRiesgo == "Normal"),
+            Criticos = eventos.Count(e => e.NivelRiesgo.Contains("critic", StringComparison.OrdinalIgnoreCase)),
+            PrePico = eventos.Count(e => e.NivelRiesgo.Contains("pre-pico", StringComparison.OrdinalIgnoreCase)),
+            Normal = eventos.Count(e => e.NivelRiesgo.Equals("normal", StringComparison.OrdinalIgnoreCase)),
             Atendidos = eventos.Count(e => e.Atendida)
         });
     }

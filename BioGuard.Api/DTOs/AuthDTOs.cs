@@ -121,7 +121,7 @@ public record VincularCuidadorRequest(
 // ── Sensores ──────────────────────────────────────────────
 
 public record LecturaSensorRequest(
-    [Range(20, 300)] int PulsoBpm,
+    [Range(20, 300)] double PulsoBpm,
     [Range(30.0, 45.0)] double TemperaturaC,
     [Range(0.0, 100.0)] double EstresPct,
     [Range(0.0, 1.0)] double? ProbabilidadPico = null,
