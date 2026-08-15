@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using BioGuard.Api.Services;
 using BioGuard.Api.DTOs;
@@ -21,14 +22,16 @@ public class AlertasController : ControllerBase
     private readonly AlertaService _alertaService;
     private readonly PacienteService _pacienteService;
     private readonly IMongoDbContext _db;
+    private readonly IHubContext<BioGuardHub> _hub;
     private readonly ILogger<AlertasController> _logger;
     private readonly OwnershipHelper _ownershipHelper;
 
-    public AlertasController(AlertaService alertaService, PacienteService pacienteService, IMongoDbContext db, ILogger<AlertasController> logger, OwnershipHelper ownershipHelper)
+    public AlertasController(AlertaService alertaService, PacienteService pacienteService, IMongoDbContext db, IHubContext<BioGuardHub> hub, ILogger<AlertasController> logger, OwnershipHelper ownershipHelper)
     {
         _alertaService = alertaService;
         _pacienteService = pacienteService;
         _db = db;
+        _hub = hub;
         _logger = logger;
         _ownershipHelper = ownershipHelper;
     }
@@ -140,6 +143,15 @@ public class AlertasController : ControllerBase
         var alerta = await _alertaService.CrearAsync(
             request.PacienteId, request.Tipo, request.Nivel,
             request.Titulo, request.Mensaje, sensorData);
+
+        // Tiempo real: avisar al grupo del paciente (cuidador conectado) de la nueva alerta
+        await _hub.Clients.Group($"paciente_{request.PacienteId}").SendAsync(
+            "AlertaRecibida",
+            request.PacienteId,
+            request.Tipo,
+            request.Nivel,
+            request.Titulo,
+            request.Mensaje);
 
         _logger.LogInformation("Alert created successfully: {AlertaId}", alerta.Id);
         return Ok(new { AlertaId = alerta.Id, message = "Alerta creada" });
