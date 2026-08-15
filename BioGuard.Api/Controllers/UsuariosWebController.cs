@@ -113,7 +113,11 @@ public class UsuariosWebController : ControllerBase
     private static List<string> PermisosParaRol(string rol) => rol switch
     {
         "admin" => new List<string> { "admin.panel", "account.profile", "account.sessions" },
-        "cuidador" => new List<string> { "account.profile", "account.sessions", "alert.read", "alert.acknowledge" },
+        "cuidador" => new List<string>
+        {
+            "account.profile", "account.sessions", "alert.read", "alert.acknowledge",
+            "health.summary", "health.history", "report.export"
+        },
         "paciente" => new List<string>
         {
             "account.profile", "account.sessions", "patient.read", "patient.manage",
