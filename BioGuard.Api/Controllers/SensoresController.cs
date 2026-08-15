@@ -2,6 +2,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using BioGuard.Api.Services;
@@ -26,10 +27,11 @@ public class SensoresController : ControllerBase
     private readonly AuditoriaService _auditoriaService;
     private readonly MLService _mlService;
     private readonly INotificacionMlService _notificacionService;
+    private readonly IHubContext<BioGuardHub> _hub;
     private readonly ILogger<SensoresController> _logger;
     private readonly OwnershipHelper _ownershipHelper;
 
-    public SensoresController(SensorService sensorService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, MLService mlService, INotificacionMlService notificacionService, ILogger<SensoresController> logger, OwnershipHelper ownershipHelper)
+    public SensoresController(SensorService sensorService, PacienteService pacienteService, IMongoDbContext db, AuditoriaService auditoriaService, MLService mlService, INotificacionMlService notificacionService, IHubContext<BioGuardHub> hub, ILogger<SensoresController> logger, OwnershipHelper ownershipHelper)
     {
         _sensorService = sensorService;
         _pacienteService = pacienteService;
@@ -37,9 +39,15 @@ public class SensoresController : ControllerBase
         _auditoriaService = auditoriaService;
         _mlService = mlService;
         _notificacionService = notificacionService;
+        _hub = hub;
         _logger = logger;
         _ownershipHelper = ownershipHelper;
     }
+
+    private static string NivelRiesgoDesdeProbabilidad(double probabilidad) =>
+        probabilidad >= 0.85 ? "CRITICO" :
+        probabilidad >= 0.7 ? "ALTO" :
+        probabilidad >= 0.5 ? "MODERADO" : "BAJO";
 
     // ── Lecturas (Envío de datos) ─────────────────────────────
 
@@ -86,6 +94,14 @@ public class SensoresController : ControllerBase
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         await _auditoriaService.RegistrarAsync(usuarioId, "insertar_lectura", "lecturas_sensores", lectura.Id, ip);
 
+        // Tiempo real: avisar al grupo del paciente (cuidador conectado) de la nueva lectura
+        var probabilidadPico = Math.Clamp(request.ProbabilidadPico ?? 0.0, 0.0, 1.0);
+        await _hub.Clients.Group($"paciente_{pacienteId}").SendAsync(
+            "LecturaActualizada",
+            pacienteId,
+            probabilidadPico,
+            NivelRiesgoDesdeProbabilidad(probabilidadPico));
+
         return Ok(new { LecturaId = lectura.Id, message = "Lectura recibida" });
     }
 
@@ -110,6 +126,15 @@ public class SensoresController : ControllerBase
                 lectura.Pasos, lectura.GlucosaEstimadaMgDl);
             count++;
         }
+
+        // Tiempo real: avisar al grupo del paciente de la última lectura del lote
+        var ultima = request[^1];
+        var probabilidadPico = Math.Clamp(ultima.ProbabilidadPico ?? 0.0, 0.0, 1.0);
+        await _hub.Clients.Group($"paciente_{pacienteId}").SendAsync(
+            "LecturaActualizada",
+            pacienteId,
+            probabilidadPico,
+            NivelRiesgoDesdeProbabilidad(probabilidadPico));
 
         return Ok(new { Procesadas = count, message = "Lote procesado" });
     }
@@ -153,6 +178,16 @@ public class SensoresController : ControllerBase
 
         // Disparar notificación push si la predicción es crítica (P(Pico) >= 0.75 o riesgo Crítico/Alto)
         _ = Task.Run(async () => await _notificacionService.NotificarPrediccionCriticaAsync(guardada));
+
+        // Tiempo real: avisar al grupo del paciente (cuidador) de la nueva predicción vigente
+        var nivel = string.IsNullOrWhiteSpace(request.NivelRiesgo) ? "ALTO" : request.NivelRiesgo;
+        await _hub.Clients.Group($"paciente_{pacienteId}").SendAsync(
+            "AlertaRecibida",
+            pacienteId,
+            "PREDICCION_ML",
+            nivel,
+            "BioGuard: riesgo de pico glucémico",
+            request.Recomendacion ?? $"Probabilidad de pico: {request.ProbabilidadPico:P0}. Revisa la predicción en la app.");
 
         return Ok(new { PrediccionId = guardada.Id, message = "Reporte guardado" });
     }
