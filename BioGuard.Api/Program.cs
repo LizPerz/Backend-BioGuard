@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MongoDB.Bson.Serialization.Conventions;
 using MongoDB.Driver;
 using BioGuard.Api.Config;
 using BioGuard.Api.Models;
@@ -17,6 +18,12 @@ var builder = WebApplication.CreateBuilder(args);
 // =============================================
 static string? FallbackIfEmpty(string? value, string? fallback)
     => string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+// Tolerar campos no modelados en documentos legados/evolucionados
+// (p.ej. 'sudoracion_gsr' en lecturas antiguas) para que la deserialización
+// no falle con FormatException al leer colecciones existentes.
+var bsonPack = new ConventionPack { new IgnoreExtraElementsConvention(true) };
+ConventionRegistry.Register("BioGuardIgnoreExtraElements", bsonPack, t => true);
 
 var mongoConnectionString = FallbackIfEmpty(builder.Configuration["ConnectionStrings:MongoDB"],
         Environment.GetEnvironmentVariable("MONGODB_CONNECTION_STRING"))
