@@ -134,7 +134,10 @@ public class PacienteService
         var paciente = await GetByIdAsync(pacienteId);
         if (paciente == null) return (string.Empty, DateTime.UtcNow, false);
         var expirado = !paciente.CodigoExpira.HasValue || paciente.CodigoExpira.Value < DateTime.UtcNow;
-        if (string.IsNullOrWhiteSpace(paciente.CodigoAccesoQr) || expirado)
+        // Regenerar si el código está vacío, expirado, o ya fue usado.
+        // Esto asegura que después de un logout (QrUsado=true) el web muestre
+        // un QR nuevo listo para el siguiente login.
+        if (string.IsNullOrWhiteSpace(paciente.CodigoAccesoQr) || expirado || paciente.QrUsado)
         {
             var codigo = await RegenerarQRAsync(pacienteId);
             return (codigo, DateTime.UtcNow.AddMinutes(CodigoVigenciaMinutos), false);

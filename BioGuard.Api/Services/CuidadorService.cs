@@ -128,7 +128,8 @@ public class CuidadorService
         var cuidador = await ObtenerPorIdAsync(id);
         if (cuidador == null) return (string.Empty, DateTime.UtcNow, false);
         var expirado = !cuidador.CodigoExpira.HasValue || cuidador.CodigoExpira.Value < DateTime.UtcNow;
-        if (string.IsNullOrWhiteSpace(cuidador.CodigoAccesoQr) || expirado)
+        // Regenerar si el código está vacío, expirado, o ya fue usado.
+        if (string.IsNullOrWhiteSpace(cuidador.CodigoAccesoQr) || expirado || cuidador.QrUsado)
         {
             var codigo = await RegenerarQRAsync(id);
             return (codigo, DateTime.UtcNow.AddMinutes(CodigoVigenciaMinutos), false);

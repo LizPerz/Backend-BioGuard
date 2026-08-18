@@ -263,9 +263,16 @@ public class AuthController : ControllerBase
             ? DateTimeOffset.FromUnixTimeSeconds(long.Parse(expClaim)).UtcDateTime
             : DateTime.UtcNow.AddMinutes(30);
 
-        await _authService.RevokeTokenAsync(jti, expiresAt);
-        _logger.LogInformation("User logged out, token revoked: {Jti}", jti);
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        await _authService.RevokeTokenAsync(jti, expiresAt);
+
+        // Reactivar QR si el usuario es paciente o cuidador, para que
+        // pueda volver a loguearse con el mismo código QR.
+        await _authService.ReactivarQrAsync(userId, role);
+
+        _logger.LogInformation("User logged out, token revoked: {Jti}", jti);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         await _auditoriaService.RegistrarAsync(userId, "logout", "usuarios_web", userId, ip);
         return Ok(new { message = "Sesión cerrada correctamente" });
@@ -281,6 +288,8 @@ public class AuthController : ControllerBase
         var usuarioId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(usuarioId)) return Unauthorized();
 
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+
         _logger.LogInformation("Revoking all sessions for user: {UsuarioId}", usuarioId);
         await _authService.RevocarTodasLasSesionesAsync(usuarioId);
 
@@ -293,6 +302,9 @@ public class AuthController : ControllerBase
                 : DateTime.UtcNow.AddMinutes(30);
             await _authService.RevokeTokenAsync(jti, expiresAt);
         }
+
+        // Reactivar QR en logout total también
+        await _authService.ReactivarQrAsync(usuarioId, role);
 
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         await _auditoriaService.RegistrarAsync(usuarioId, "logout_total", "usuarios_web", usuarioId, ip);

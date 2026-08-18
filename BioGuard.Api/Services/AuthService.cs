@@ -251,9 +251,14 @@ public class AuthService
     public async Task<AuthResponse?> LoginByCodigoAsync(LoginCodigoRequest request)
     {
         // ── Paciente ──────────────────────────────────────────
+        // Filtro atómico: código coincide, QR no usado, Y no expirado.
+        // La verificación de expiración está DENTRO del filtro para que
+        // un código expirado NUNCA se marque como usado.
+        var now = DateTime.UtcNow;
         var pacienteFilter = Builders<Paciente>.Filter.And(
             Builders<Paciente>.Filter.Eq(p => p.CodigoAccesoQr, request.CodigoAcceso),
-            Builders<Paciente>.Filter.Eq(p => p.QrUsado, false));
+            Builders<Paciente>.Filter.Eq(p => p.QrUsado, false),
+            Builders<Paciente>.Filter.Gte(p => p.CodigoExpira, now));
 
         var pacienteUpdate = Builders<Paciente>.Update.Set(p => p.QrUsado, true);
         var pacienteResult = await _db.Pacientes.FindOneAndUpdateAsync<Paciente>(
@@ -262,11 +267,6 @@ public class AuthService
 
         if (pacienteResult != null)
         {
-            if (pacienteResult.CodigoExpira.HasValue && pacienteResult.CodigoExpira < DateTime.UtcNow)
-            {
-                _logger.LogWarning("Patient login by code failed - code expired: {PacienteId}", pacienteResult.Id);
-                return null;
-            }
             var token = GenerateToken(pacienteResult.Id, pacienteResult.CodigoAccesoQr, "paciente", pacienteId: pacienteResult.Id);
             var refreshToken = await CreateAndStoreRefreshTokenAsync(pacienteResult.Id, "paciente");
             _logger.LogInformation("Patient login by code (single-use): {PacienteId}", pacienteResult.Id);
@@ -276,7 +276,8 @@ public class AuthService
         // ── Cuidador ──────────────────────────────────────────
         var cuidadorFilter = Builders<Cuidador>.Filter.And(
             Builders<Cuidador>.Filter.Eq(c => c.CodigoAccesoQr, request.CodigoAcceso),
-            Builders<Cuidador>.Filter.Eq(c => c.QrUsado, false));
+            Builders<Cuidador>.Filter.Eq(c => c.QrUsado, false),
+            Builders<Cuidador>.Filter.Gte(c => c.CodigoExpira, now));
 
         var cuidadorUpdate = Builders<Cuidador>.Update.Set(c => c.QrUsado, true);
         var cuidadorResult = await _db.Cuidadores.FindOneAndUpdateAsync<Cuidador>(
@@ -285,18 +286,13 @@ public class AuthService
 
         if (cuidadorResult != null)
         {
-            if (cuidadorResult.CodigoExpira.HasValue && cuidadorResult.CodigoExpira < DateTime.UtcNow)
-            {
-                _logger.LogWarning("Caregiver login by code failed - code expired: {CuidadorId}", cuidadorResult.Id);
-                return null;
-            }
             var token = GenerateToken(cuidadorResult.Id, cuidadorResult.CodigoAccesoQr, "cuidador");
             var refreshToken = await CreateAndStoreRefreshTokenAsync(cuidadorResult.Id, "cuidador");
             _logger.LogInformation("Caregiver login by code (single-use): {CuidadorId}", cuidadorResult.Id);
             return new AuthResponse(token, cuidadorResult.Id, cuidadorResult.Nombre, "cuidador", "cuidador", RefreshToken: refreshToken);
         }
 
-        _logger.LogWarning("Login by code failed: code not found or already used");
+        _logger.LogWarning("Login by code failed: code not found, expired, or already used");
         return null;
     }
 
@@ -601,6 +597,32 @@ public class AuthService
             ExpiresAt = expiresAt
         });
         _logger.LogInformation("Token revoked: {Jti}", jti);
+    }
+
+    /// <summary>
+    /// Reactiva el QR de un paciente o cuidador al cerrar sesión.
+    /// Esto permite que el mismo dispositivo (u otro) pueda volver a
+    /// escanear el QR para iniciar sesión. El QR es de uso único por
+    /// sesión: se consume al login y se reactiva al logout.
+    /// </summary>
+    public async Task ReactivarQrAsync(string usuarioId, string? role)
+    {
+        if (role == "paciente")
+        {
+            var update = Builders<Paciente>.Update
+                .Set(p => p.QrUsado, false)
+                .Set(p => p.CodigoExpira, DateTime.UtcNow.AddMinutes(PacienteService.CodigoVigenciaMinutos));
+            await _db.Pacientes.UpdateOneAsync(p => p.Id == usuarioId, update);
+            _logger.LogInformation("QR reactivated for patient on logout: {PacienteId}", usuarioId);
+        }
+        else if (role == "cuidador")
+        {
+            var update = Builders<Cuidador>.Update
+                .Set(c => c.QrUsado, false)
+                .Set(c => c.CodigoExpira, DateTime.UtcNow.AddMinutes(CuidadorService.CodigoVigenciaMinutos));
+            await _db.Cuidadores.UpdateOneAsync(c => c.Id == usuarioId, update);
+            _logger.LogInformation("QR reactivated for caregiver on logout: {CuidadorId}", usuarioId);
+        }
     }
 
     public async Task<bool> IsTokenRevokedAsync(string jti)
