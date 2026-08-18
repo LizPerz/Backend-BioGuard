@@ -23,6 +23,9 @@ public class Cuidador
     [BsonElement("codigo_expira")]
     public DateTime? CodigoExpira { get; set; }
 
+    [BsonElement("qr_usado")]
+    public bool QrUsado { get; set; } = false;
+
     [BsonElement("usuario_vinculado_id")]
     [BsonRepresentation(BsonType.ObjectId)]
     public string? UsuarioVinculadoId { get; set; }

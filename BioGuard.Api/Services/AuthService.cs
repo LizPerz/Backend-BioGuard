@@ -250,35 +250,53 @@ public class AuthService
 
     public async Task<AuthResponse?> LoginByCodigoAsync(LoginCodigoRequest request)
     {
-        var paciente = await _db.FindFirstOrDefaultAsync(_db.Pacientes, p => p.CodigoAccesoQr == request.CodigoAcceso);
-        if (paciente != null)
+        // ── Paciente ──────────────────────────────────────────
+        var pacienteFilter = Builders<Paciente>.Filter.And(
+            Builders<Paciente>.Filter.Eq(p => p.CodigoAccesoQr, request.CodigoAcceso),
+            Builders<Paciente>.Filter.Eq(p => p.QrUsado, false));
+
+        var pacienteUpdate = Builders<Paciente>.Update.Set(p => p.QrUsado, true);
+        var pacienteResult = await _db.Pacientes.FindOneAndUpdateAsync<Paciente>(
+            pacienteFilter, pacienteUpdate,
+            new FindOneAndUpdateOptions<Paciente> { ReturnDocument = ReturnDocument.After });
+
+        if (pacienteResult != null)
         {
-            if (paciente.CodigoExpira.HasValue && paciente.CodigoExpira < DateTime.UtcNow)
+            if (pacienteResult.CodigoExpira.HasValue && pacienteResult.CodigoExpira < DateTime.UtcNow)
             {
-                _logger.LogWarning("Patient login by code failed - code expired: {PacienteId}", paciente.Id);
+                _logger.LogWarning("Patient login by code failed - code expired: {PacienteId}", pacienteResult.Id);
                 return null;
             }
-            var token = GenerateToken(paciente.Id, paciente.CodigoAccesoQr, "paciente", pacienteId: paciente.Id);
-            var refreshToken = await CreateAndStoreRefreshTokenAsync(paciente.Id, "paciente");
-            _logger.LogInformation("Patient login by code: {PacienteId}", paciente.Id);
-            return new AuthResponse(token, paciente.Id, paciente.Nombre, "paciente", "paciente", RefreshToken: refreshToken);
+            var token = GenerateToken(pacienteResult.Id, pacienteResult.CodigoAccesoQr, "paciente", pacienteId: pacienteResult.Id);
+            var refreshToken = await CreateAndStoreRefreshTokenAsync(pacienteResult.Id, "paciente");
+            _logger.LogInformation("Patient login by code (single-use): {PacienteId}", pacienteResult.Id);
+            return new AuthResponse(token, pacienteResult.Id, pacienteResult.Nombre, "paciente", "paciente", RefreshToken: refreshToken);
         }
 
-        var cuidador = await _db.FindFirstOrDefaultAsync(_db.Cuidadores, c => c.CodigoAccesoQr == request.CodigoAcceso);
-        if (cuidador != null)
+        // ── Cuidador ──────────────────────────────────────────
+        var cuidadorFilter = Builders<Cuidador>.Filter.And(
+            Builders<Cuidador>.Filter.Eq(c => c.CodigoAccesoQr, request.CodigoAcceso),
+            Builders<Cuidador>.Filter.Eq(c => c.QrUsado, false));
+
+        var cuidadorUpdate = Builders<Cuidador>.Update.Set(c => c.QrUsado, true);
+        var cuidadorResult = await _db.Cuidadores.FindOneAndUpdateAsync<Cuidador>(
+            cuidadorFilter, cuidadorUpdate,
+            new FindOneAndUpdateOptions<Cuidador> { ReturnDocument = ReturnDocument.After });
+
+        if (cuidadorResult != null)
         {
-            if (cuidador.CodigoExpira.HasValue && cuidador.CodigoExpira < DateTime.UtcNow)
+            if (cuidadorResult.CodigoExpira.HasValue && cuidadorResult.CodigoExpira < DateTime.UtcNow)
             {
-                _logger.LogWarning("Caregiver login by code failed - code expired: {CuidadorId}", cuidador.Id);
+                _logger.LogWarning("Caregiver login by code failed - code expired: {CuidadorId}", cuidadorResult.Id);
                 return null;
             }
-            var token = GenerateToken(cuidador.Id, cuidador.CodigoAccesoQr, "cuidador");
-            var refreshToken = await CreateAndStoreRefreshTokenAsync(cuidador.Id, "cuidador");
-            _logger.LogInformation("Caregiver login by code: {CuidadorId}", cuidador.Id);
-            return new AuthResponse(token, cuidador.Id, cuidador.Nombre, "cuidador", "cuidador", RefreshToken: refreshToken);
+            var token = GenerateToken(cuidadorResult.Id, cuidadorResult.CodigoAccesoQr, "cuidador");
+            var refreshToken = await CreateAndStoreRefreshTokenAsync(cuidadorResult.Id, "cuidador");
+            _logger.LogInformation("Caregiver login by code (single-use): {CuidadorId}", cuidadorResult.Id);
+            return new AuthResponse(token, cuidadorResult.Id, cuidadorResult.Nombre, "cuidador", "cuidador", RefreshToken: refreshToken);
         }
 
-        _logger.LogWarning("Login by code failed: code not found");
+        _logger.LogWarning("Login by code failed: code not found or already used");
         return null;
     }
 
