@@ -23,3 +23,5 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "BioGuard.Api.dll"]
+
+# Security: No se exponen puertos innecesarios, el contenedor corre como no-root (USER $APP_UID)

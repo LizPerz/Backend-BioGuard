@@ -68,6 +68,20 @@ jobs:
           allow_issue_writing: false
           artifact_name: 'zap-api-report'
 
+      - name: Upload ZAP reports to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
+        if: always()
+        with:
+          sarif_file: zap-baseline-report.sarif
+          category: zap-baseline
+
+      - name: Upload ZAP API results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
+        if: always()
+        with:
+          sarif_file: zap-api-report.sarif
+          category: zap-api
+
       - name: Upload ZAP reports
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
