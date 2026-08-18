@@ -133,9 +133,11 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
             CodigoAccesoQr = "ABC12345",
             Nombre = "Paciente Test"
         };
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                It.IsAny<IMongoCollection<Paciente>>(),
-                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+        _mockDb.Setup(db => db.Pacientes.FindOneAndUpdateAsync(
+                It.IsAny<FilterDefinition<Paciente>>(),
+                It.IsAny<UpdateDefinition<Paciente>>(),
+                It.IsAny<FindOneAndUpdateOptions<Paciente>>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(paciente);
 
         var request = new LoginCodigoRequest("ABC12345");
@@ -150,13 +152,17 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task LoginByCodigo_CodigoInvalido_Retorna404()
     {
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                It.IsAny<IMongoCollection<Paciente>>(),
-                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+        _mockDb.Setup(db => db.Pacientes.FindOneAndUpdateAsync(
+                It.IsAny<FilterDefinition<Paciente>>(),
+                It.IsAny<UpdateDefinition<Paciente>>(),
+                It.IsAny<FindOneAndUpdateOptions<Paciente>>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync((Paciente?)null);
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                It.IsAny<IMongoCollection<Cuidador>>(),
-                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+        _mockDb.Setup(db => db.Cuidadores.FindOneAndUpdateAsync(
+                It.IsAny<FilterDefinition<Cuidador>>(),
+                It.IsAny<UpdateDefinition<Cuidador>>(),
+                It.IsAny<FindOneAndUpdateOptions<Cuidador>>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync((Cuidador?)null);
 
         var request = new LoginCodigoRequest("INVALID0");

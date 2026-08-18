@@ -414,9 +414,11 @@ public class AuthServiceTests
     public async Task LoginByCodigoAsync_CodigoPaciente_RetornaAuthResponse()
     {
         var paciente = new Paciente { Id = "pac123", CodigoAccesoQr = "ABC12345", Nombre = "Paciente" };
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                It.IsAny<IMongoCollection<Paciente>>(),
-                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+        _mockPacientes.Setup(c => c.FindOneAndUpdateAsync(
+                It.IsAny<FilterDefinition<Paciente>>(),
+                It.IsAny<UpdateDefinition<Paciente>>(),
+                It.IsAny<FindOneAndUpdateOptions<Paciente>>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(paciente);
 
         var request = new LoginCodigoRequest("ABC12345");
@@ -430,14 +432,18 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginByCodigoAsync_CodigoCuidador_RetornaAuthResponse()
     {
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                It.IsAny<IMongoCollection<Paciente>>(),
-                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+        _mockPacientes.Setup(c => c.FindOneAndUpdateAsync(
+                It.IsAny<FilterDefinition<Paciente>>(),
+                It.IsAny<UpdateDefinition<Paciente>>(),
+                It.IsAny<FindOneAndUpdateOptions<Paciente>>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync((Paciente?)null);
         var cuidador = new Cuidador { Id = "cuid123", CodigoAccesoQr = "CU-ABC123", Nombre = "Cuidador" };
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                It.IsAny<IMongoCollection<Cuidador>>(),
-                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+        _mockCuidadores.Setup(c => c.FindOneAndUpdateAsync(
+                It.IsAny<FilterDefinition<Cuidador>>(),
+                It.IsAny<UpdateDefinition<Cuidador>>(),
+                It.IsAny<FindOneAndUpdateOptions<Cuidador>>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(cuidador);
 
         var request = new LoginCodigoRequest("CU-ABC123");
@@ -450,16 +456,42 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginByCodigoAsync_CodigoInvalido_RetornaNull()
     {
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                It.IsAny<IMongoCollection<Paciente>>(),
-                It.IsAny<System.Linq.Expressions.Expression<Func<Paciente, bool>>>()))
+        _mockPacientes.Setup(c => c.FindOneAndUpdateAsync(
+                It.IsAny<FilterDefinition<Paciente>>(),
+                It.IsAny<UpdateDefinition<Paciente>>(),
+                It.IsAny<FindOneAndUpdateOptions<Paciente>>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync((Paciente?)null);
-        _mockDb.Setup(db => db.FindFirstOrDefaultAsync(
-                It.IsAny<IMongoCollection<Cuidador>>(),
-                It.IsAny<System.Linq.Expressions.Expression<Func<Cuidador, bool>>>()))
+        _mockCuidadores.Setup(c => c.FindOneAndUpdateAsync(
+                It.IsAny<FilterDefinition<Cuidador>>(),
+                It.IsAny<UpdateDefinition<Cuidador>>(),
+                It.IsAny<FindOneAndUpdateOptions<Cuidador>>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync((Cuidador?)null);
 
         var request = new LoginCodigoRequest("INVALID");
+        var result = await _service.LoginByCodigoAsync(request);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LoginByCodigoAsync_QrYaUsado_RetornaNull()
+    {
+        _mockPacientes.Setup(c => c.FindOneAndUpdateAsync(
+                It.IsAny<FilterDefinition<Paciente>>(),
+                It.IsAny<UpdateDefinition<Paciente>>(),
+                It.IsAny<FindOneAndUpdateOptions<Paciente>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Paciente?)null);
+        _mockCuidadores.Setup(c => c.FindOneAndUpdateAsync(
+                It.IsAny<FilterDefinition<Cuidador>>(),
+                It.IsAny<UpdateDefinition<Cuidador>>(),
+                It.IsAny<FindOneAndUpdateOptions<Cuidador>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Cuidador?)null);
+
+        var request = new LoginCodigoRequest("USED-QR-CODE");
         var result = await _service.LoginByCodigoAsync(request);
 
         result.Should().BeNull();

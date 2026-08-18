@@ -275,7 +275,7 @@ public class CuidadoresController : ControllerBase
 
         _logger.LogInformation("Fetching QR for cuidador: {CuidadorId}", id);
         var (codigo, expira, qrUsado) = await _cuidadorService.ObtenerOCrearCodigoAsync(id);
-        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = expira, TokenActivo = qrUsado });
+        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = expira, TokenActivo = !qrUsado });
     }
 
     /// <summary>
