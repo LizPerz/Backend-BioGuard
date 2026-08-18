@@ -46,6 +46,20 @@ public class AuthServiceTests
             It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        _mockPacientes.Setup(c => c.UpdateOneAsync(
+            It.IsAny<FilterDefinition<Paciente>>(),
+            It.IsAny<UpdateDefinition<Paciente>>(),
+            It.IsAny<UpdateOptions>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UpdateResult.Acknowledged(1, 1, null));
+
+        _mockCuidadores.Setup(c => c.UpdateOneAsync(
+            It.IsAny<FilterDefinition<Cuidador>>(),
+            It.IsAny<UpdateDefinition<Cuidador>>(),
+            It.IsAny<UpdateOptions>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UpdateResult.Acknowledged(1, 1, null));
+
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Jwt:Key"] = "BioGuard2024SecretKeyForJWTAuthentication!@#$%^&*()",

@@ -42,8 +42,24 @@ public class CustomWebApplicationFactory : WebApplicationFactory<BioGuard.Api.Pr
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new Mock<UpdateResult>().Object);
             MockDbContext.Setup(db => db.UsuariosWeb).Returns(mockUsuariosWeb.Object);
-            MockDbContext.Setup(db => db.Pacientes).Returns(new Mock<IMongoCollection<Paciente>>().Object);
-            MockDbContext.Setup(db => db.Cuidadores).Returns(new Mock<IMongoCollection<Cuidador>>().Object);
+
+            var mockPacientes = new Mock<IMongoCollection<Paciente>>();
+            mockPacientes.Setup(c => c.UpdateOneAsync(
+                    It.IsAny<FilterDefinition<Paciente>>(),
+                    It.IsAny<UpdateDefinition<Paciente>>(),
+                    It.IsAny<UpdateOptions>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Mock<UpdateResult>().Object);
+            MockDbContext.Setup(db => db.Pacientes).Returns(mockPacientes.Object);
+
+            var mockCuidadores = new Mock<IMongoCollection<Cuidador>>();
+            mockCuidadores.Setup(c => c.UpdateOneAsync(
+                    It.IsAny<FilterDefinition<Cuidador>>(),
+                    It.IsAny<UpdateDefinition<Cuidador>>(),
+                    It.IsAny<UpdateOptions>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Mock<UpdateResult>().Object);
+            MockDbContext.Setup(db => db.Cuidadores).Returns(mockCuidadores.Object);
             MockDbContext.Setup(db => db.Dispositivos).Returns(new Mock<IMongoCollection<Dispositivo>>().Object);
             MockDbContext.Setup(db => db.LecturasSensores).Returns(new Mock<IMongoCollection<LecturaSensor>>().Object);
             MockDbContext.Setup(db => db.EventosMetabolicos).Returns(new Mock<IMongoCollection<EventoMetabolico>>().Object);

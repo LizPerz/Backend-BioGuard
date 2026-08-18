@@ -19,6 +19,9 @@ public class Paciente
     [BsonElement("codigo_expira")]
     public DateTime? CodigoExpira { get; set; }
 
+    [BsonElement("qr_usado")]
+    public bool QrUsado { get; set; } = false;
+
     [BsonElement("nombre")]
     public string Nombre { get; set; } = string.Empty;
 

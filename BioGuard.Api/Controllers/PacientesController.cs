@@ -268,8 +268,8 @@ public class PacientesController : ControllerBase
         }
 
         _logger.LogInformation("Fetching QR for paciente: {PacienteId}", id);
-        var (codigo, expira) = await _pacienteService.ObtenerOCrearCodigoAsync(id);
-        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = expira });
+        var (codigo, expira, qrUsado) = await _pacienteService.ObtenerOCrearCodigoAsync(id);
+        return Ok(new { CodigoAccesoQr = codigo, CodigoExpira = expira, TokenActivo = qrUsado });
     }
 
     /// <summary>

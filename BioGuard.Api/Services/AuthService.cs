@@ -258,6 +258,14 @@ public class AuthService
                 _logger.LogWarning("Patient login by code failed - code expired: {PacienteId}", paciente.Id);
                 return null;
             }
+            if (paciente.QrUsado)
+            {
+                _logger.LogWarning("Patient login by code failed - code already used: {PacienteId}", paciente.Id);
+                return null;
+            }
+            await _db.Pacientes.UpdateOneAsync(
+                p => p.Id == paciente.Id,
+                Builders<Paciente>.Update.Set(p => p.QrUsado, true));
             var token = GenerateToken(paciente.Id, paciente.CodigoAccesoQr, "paciente", pacienteId: paciente.Id);
             var refreshToken = await CreateAndStoreRefreshTokenAsync(paciente.Id, "paciente");
             _logger.LogInformation("Patient login by code: {PacienteId}", paciente.Id);
@@ -272,6 +280,14 @@ public class AuthService
                 _logger.LogWarning("Caregiver login by code failed - code expired: {CuidadorId}", cuidador.Id);
                 return null;
             }
+            if (cuidador.QrUsado)
+            {
+                _logger.LogWarning("Caregiver login by code failed - code already used: {CuidadorId}", cuidador.Id);
+                return null;
+            }
+            await _db.Cuidadores.UpdateOneAsync(
+                c => c.Id == cuidador.Id,
+                Builders<Cuidador>.Update.Set(c => c.QrUsado, true));
             var token = GenerateToken(cuidador.Id, cuidador.CodigoAccesoQr, "cuidador");
             var refreshToken = await CreateAndStoreRefreshTokenAsync(cuidador.Id, "cuidador");
             _logger.LogInformation("Caregiver login by code: {CuidadorId}", cuidador.Id);

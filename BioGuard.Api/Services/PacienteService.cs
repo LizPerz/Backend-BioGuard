@@ -129,17 +129,17 @@ public class PacienteService
         return result.DeletedCount > 0;
     }
 
-    public async Task<(string codigo, DateTime expira)> ObtenerOCrearCodigoAsync(string pacienteId)
+    public async Task<(string codigo, DateTime expira, bool qrUsado)> ObtenerOCrearCodigoAsync(string pacienteId)
     {
         var paciente = await GetByIdAsync(pacienteId);
-        if (paciente == null) return (string.Empty, DateTime.UtcNow);
+        if (paciente == null) return (string.Empty, DateTime.UtcNow, false);
         var expirado = !paciente.CodigoExpira.HasValue || paciente.CodigoExpira.Value < DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(paciente.CodigoAccesoQr) || expirado)
         {
             var codigo = await RegenerarQRAsync(pacienteId);
-            return (codigo, DateTime.UtcNow.AddMinutes(CodigoVigenciaMinutos));
+            return (codigo, DateTime.UtcNow.AddMinutes(CodigoVigenciaMinutos), false);
         }
-        return (paciente.CodigoAccesoQr, paciente.CodigoExpira!.Value);
+        return (paciente.CodigoAccesoQr, paciente.CodigoExpira!.Value, paciente.QrUsado);
     }
 
     public async Task<string> RegenerarQRAsync(string pacienteId)
@@ -147,7 +147,8 @@ public class PacienteService
         var codigo = GenerarCodigo();
         var update = Builders<Paciente>.Update
             .Set(p => p.CodigoAccesoQr, codigo)
-            .Set(p => p.CodigoExpira, DateTime.UtcNow.AddMinutes(CodigoVigenciaMinutos));
+            .Set(p => p.CodigoExpira, DateTime.UtcNow.AddMinutes(CodigoVigenciaMinutos))
+            .Set(p => p.QrUsado, false);
         await _db.Pacientes.UpdateOneAsync(p => p.Id == pacienteId, update);
         _logger.LogInformation("QR regenerated for patient: {PacienteId}", pacienteId);
         return codigo;
